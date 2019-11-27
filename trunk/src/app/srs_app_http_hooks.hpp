@@ -97,7 +97,7 @@ public:
     // Discover co-workers for origin cluster.
     static srs_error_t discover_co_workers(std::string url, std::string& host, int& port);
 private:
-    static srs_error_t do_post(SrsHttpClient* hc, std::string url, std::string req, int& code, std::string& res);
+    static srs_error_t do_post(SrsHttpClient* hc, std::string url, std::string req, int& code, std::string& res, SrsRequest* ro = NULL);
 };
 
 #endif

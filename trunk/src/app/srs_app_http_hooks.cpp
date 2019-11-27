@@ -148,7 +148,7 @@ srs_error_t SrsHttpHooks::on_publish(string url, SrsRequest* req)
     int status_code;
     
     SrsHttpClient http;
-    if ((err = do_post(&http, url, data, status_code, res)) != srs_success) {
+    if ((err = do_post(&http, url, data, status_code, res, req)) != srs_success) {
         return srs_error_wrap(err, "http: on_publish failed, client_id=%d, url=%s, request=%s, response=%s, code=%d",
             client_id, url.c_str(), data.c_str(), res.c_str(), status_code);
     }
@@ -469,7 +469,7 @@ srs_error_t SrsHttpHooks::discover_co_workers(string url, string& host, int& por
     return err;
 }
 
-srs_error_t SrsHttpHooks::do_post(SrsHttpClient* hc, std::string url, std::string req, int& code, string& res)
+srs_error_t SrsHttpHooks::do_post(SrsHttpClient* hc, std::string url, std::string req, int& code, string& res, SrsRequest* ro)
 {
     srs_error_t err = srs_success;
     
@@ -530,6 +530,11 @@ srs_error_t SrsHttpHooks::do_post(SrsHttpClient* hc, std::string url, std::strin
     if ((res_code = res_info->ensure_property_integer("code")) == NULL) {
         return srs_error_new(ERROR_RESPONSE_CODE, "http: response object no code %s", res.c_str());
     }
+
+    SrsJsonAny* timeout = NULL;
+	if (ro != NULL&&(timeout = res_info->ensure_property_integer("timeout")) != NULL) {
+		ro->timeout = timeout->to_integer();
+	}
     
     if ((res_code->to_integer()) != ERROR_SUCCESS) {
         return srs_error_new(ERROR_RESPONSE_CODE, "http: response object code %d %s", res_code->to_integer(), res.c_str());
