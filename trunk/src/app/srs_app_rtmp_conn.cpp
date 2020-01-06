@@ -1,7 +1,7 @@
 /**
  * The MIT License (MIT)
  *
- * Copyright (c) 2013-2019 Winlin
+ * Copyright (c) 2013-2020 Winlin
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -390,8 +390,8 @@ srs_error_t SrsRtmpConn::service_cycle()
         
         // stream service must terminated with error, never success.
         // when terminated with success, it's user required to stop.
-        if (srs_error_code(err) == ERROR_SUCCESS) {
-            srs_freep(err);
+        // TODO: FIXME: Support RTMP client timeout, https://github.com/ossrs/srs/issues/1134
+        if (err == srs_success) {
             continue;
         }
         
@@ -607,15 +607,27 @@ srs_error_t SrsRtmpConn::playing(SrsSource* source)
     if (!info->edge && _srs_config->get_vhost_origin_cluster(req->vhost) && source->inactive()) {
         vector<string> coworkers = _srs_config->get_vhost_coworkers(req->vhost);
         for (int i = 0; i < (int)coworkers.size(); i++) {
-            int port;
-            string host;
-            string url = "http://" + coworkers.at(i) + "/api/v1/clusters?"
-                + "vhost=" + req->vhost + "&ip=" + req->host + "&app=" + req->app + "&stream=" + req->stream;
+            // TODO: FIXME: User may config the server itself as coworker, we must identify and ignore it.
+            string host; int port = 0; string coworker = coworkers.at(i);
+
+            string url = "http://" + coworker + "/api/v1/clusters?"
+                + "vhost=" + req->vhost + "&ip=" + req->host + "&app=" + req->app + "&stream=" + req->stream
+                + "&coworker=" + coworker;
             if ((err = SrsHttpHooks::discover_co_workers(url, host, port)) != srs_success) {
+                // If failed to discovery stream in this coworker, we should request the next one util the last.
+                // @see https://github.com/ossrs/srs/issues/1223
+                if (i < (int)coworkers.size() - 1) {
+                    continue;
+                }
                 return srs_error_wrap(err, "discover coworkers, url=%s", url.c_str());
             }
             srs_trace("rtmp: redirect in cluster, from=%s:%d, target=%s:%d, url=%s",
                 req->host.c_str(), req->port, host.c_str(), port, url.c_str());
+
+            // Ignore if host or port is invalid.
+            if (host.empty() || port == 0) {
+                continue;
+            }
             
             bool accepted = false;
             if ((err = rtmp->redirect(req, host, port, accepted)) != srs_success) {
@@ -1179,7 +1191,8 @@ srs_error_t SrsRtmpConn::do_token_traverse_auth(SrsRtmpClient* client)
     }
     
     // for token tranverse, always take the debug info(which carries token).
-    if ((err = client->connect_app(req->app, req->tcUrl, req, true, NULL)) != srs_success) {
+    SrsServerInfo si;
+    if ((err = client->connect_app(req->app, req->tcUrl, req, true, &si)) != srs_success) {
         return srs_error_wrap(err, "rtmp: connect tcUrl");
     }
     

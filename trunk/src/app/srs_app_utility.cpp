@@ -1,7 +1,7 @@
 /**
  * The MIT License (MIT)
  *
- * Copyright (c) 2013-2019 Winlin
+ * Copyright (c) 2013-2020 Winlin
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -29,7 +29,6 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include <math.h>
 #include <netdb.h>
 
 #ifdef SRS_OSX
@@ -1143,7 +1142,7 @@ string srs_get_peer_ip(int fd)
     // discovery client information
     sockaddr_storage addr;
     socklen_t addrlen = sizeof(addr);
-    if (getsockname(fd, (sockaddr*)&addr, &addrlen) == -1) {
+    if (getpeername(fd, (sockaddr*)&addr, &addrlen) == -1) {
         return "";
     }
 
@@ -1158,18 +1157,7 @@ string srs_get_peer_ip(int fd)
     return std::string(saddr);
 }
 
-bool srs_is_digit_number(const string& str)
-{
-    if (str.empty()) {
-        return false;
-    }
-    
-    int v = ::atoi(str.c_str());
-    int powv = (int)pow(10, str.length() - 1);
-    return  v / powv >= 1 && v / powv <= 9;
-}
-
-bool srs_is_boolean(const string& str)
+bool srs_is_boolean(string str)
 {
     return str == "true" || str == "false";
 }

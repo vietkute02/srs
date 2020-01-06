@@ -1,7 +1,7 @@
 /**
  * The MIT License (MIT)
  *
- * Copyright (c) 2013-2019 Winlin
+ * Copyright (c) 2013-2020 Winlin
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -137,6 +137,36 @@ SrsPacket::~SrsPacket()
 {
 }
 
+srs_error_t SrsPacket::to_msg(SrsCommonMessage* msg, int stream_id)
+{
+    srs_error_t err = srs_success;
+
+    int size = 0;
+    char* payload = NULL;
+    if ((err = encode(size, payload)) != srs_success) {
+        return srs_error_wrap(err, "encode packet");
+    }
+
+    // encode packet to payload and size.
+    if (size <= 0 || payload == NULL) {
+        srs_warn("packet is empty, ignore empty message.");
+        return err;
+    }
+
+    // to message
+    SrsMessageHeader header;
+    header.payload_length = size;
+    header.message_type = get_message_type();
+    header.stream_id = stream_id;
+    header.perfer_cid = get_prefer_cid();
+
+    if ((err = msg->create(&header, payload, size)) != srs_success) {
+        return srs_error_wrap(err, "create %dB message", size);
+    }
+
+    return err;
+}
+
 srs_error_t SrsPacket::encode(int& psize, char*& ppayload)
 {
     srs_error_t err = srs_success;
@@ -190,7 +220,8 @@ srs_error_t SrsPacket::encode_packet(SrsBuffer* stream)
 SrsProtocol::AckWindowSize::AckWindowSize()
 {
     window = 0;
-    sequence_number = nb_recv_bytes = 0;
+    sequence_number = 0;
+    nb_recv_bytes = 0;
 }
 
 SrsProtocol::SrsProtocol(ISrsProtocolReadWriter* io)
@@ -201,7 +232,7 @@ SrsProtocol::SrsProtocol(ISrsProtocolReadWriter* io)
     in_chunk_size = SRS_CONSTS_RTMP_PROTOCOL_CHUNK_SIZE;
     out_chunk_size = SRS_CONSTS_RTMP_PROTOCOL_CHUNK_SIZE;
     
-    nb_out_iovs = SRS_CONSTS_IOVS_MAX;
+    nb_out_iovs = 8 * SRS_CONSTS_IOVS_MAX;
     out_iovs = (iovec*)malloc(sizeof(iovec) * nb_out_iovs);
     // each chunk consumers atleast 2 iovs
     srs_assert(nb_out_iovs >= 2);
@@ -223,6 +254,8 @@ SrsProtocol::SrsProtocol(ISrsProtocolReadWriter* io)
         
         cs_cache[cid] = cs;
     }
+
+    out_c0c3_caches = new char[SRS_CONSTS_C0C3_HEADERS_MAX];
 }
 
 SrsProtocol::~SrsProtocol()
@@ -261,6 +294,8 @@ SrsProtocol::~SrsProtocol()
         srs_freep(cs);
     }
     srs_freepa(cs_cache);
+
+    srs_freepa(out_c0c3_caches);
 }
 
 void SrsProtocol::set_auto_response(bool v)
@@ -456,11 +491,11 @@ srs_error_t SrsProtocol::do_send_messages(SrsSharedPtrMessage** msgs, int nb_msg
             // for we donot know how many messges maybe to send entirely,
             // we just alloc the iovs, it's ok.
             if (iov_index >= nb_out_iovs - 2) {
-                srs_warn("resize iovs %d => %d, max_msgs=%d", nb_out_iovs, nb_out_iovs + SRS_CONSTS_IOVS_MAX, SRS_PERF_MW_MSGS);
-                
-                nb_out_iovs += SRS_CONSTS_IOVS_MAX;
+                int ov = nb_out_iovs;
+                nb_out_iovs = 2 * nb_out_iovs;
                 int realloc_size = sizeof(iovec) * nb_out_iovs;
                 out_iovs = (iovec*)realloc(out_iovs, realloc_size);
+                srs_warn("resize iovs %d => %d, max_msgs=%d", ov, nb_out_iovs, SRS_PERF_MW_MSGS);
             }
             
             // to next pair of iovs
@@ -570,70 +605,26 @@ srs_error_t SrsProtocol::do_send_and_free_packet(SrsPacket* packet, int stream_i
     
     srs_assert(packet);
     SrsAutoFree(SrsPacket, packet);
-    
-    int size = 0;
-    char* payload = NULL;
-    if ((err = packet->encode(size, payload)) != srs_success) {
-        return srs_error_wrap(err, "encode packet");
-    }
-    
-    // encode packet to payload and size.
-    if (size <= 0 || payload == NULL) {
-        srs_warn("packet is empty, ignore empty message.");
-        return err;
-    }
-    
-    // to message
-    SrsMessageHeader header;
-    header.payload_length = size;
-    header.message_type = packet->get_message_type();
-    header.stream_id = stream_id;
-    header.perfer_cid = packet->get_prefer_cid();
-    
-    err = do_simple_send(&header, payload, size);
-    srs_freepa(payload);
-    if (err != srs_success) {
-        return srs_error_wrap(err, "simple send");
-    }
-    
-    if ((err = on_send_packet(&header, packet)) != srs_success) {
-        return srs_error_wrap(err, "on send packet");
-    }
-    
-    return err;
-}
 
-srs_error_t SrsProtocol::do_simple_send(SrsMessageHeader* mh, char* payload, int size)
-{
-    srs_error_t err = srs_success;
+    SrsCommonMessage* msg = new SrsCommonMessage();
+    SrsAutoFree(SrsCommonMessage, msg);
+
+    if ((err = packet->to_msg(msg, stream_id)) != srs_success) {
+        return srs_error_wrap(err, "to message");
+    }
+
+    SrsSharedPtrMessage* shared_msg = new SrsSharedPtrMessage();
+    if ((err = shared_msg->create(msg)) != srs_success) {
+        srs_freep(shared_msg);
+        return srs_error_wrap(err, "create message");
+    }
+
+    if ((err = send_and_free_message(shared_msg, stream_id)) != srs_success) {
+        return srs_error_wrap(err, "send packet");
+    }
     
-    // we directly send out the packet,
-    // use very simple algorithm, not very fast,
-    // but it's ok.
-    char* p = payload;
-    char* end = p + size;
-    char c0c3[SRS_CONSTS_RTMP_MAX_FMT0_HEADER_SIZE];
-    while (p < end) {
-        int nbh = 0;
-        if (p == payload) {
-            nbh = srs_chunk_header_c0(mh->perfer_cid, (uint32_t)mh->timestamp, mh->payload_length, mh->message_type, mh->stream_id, c0c3, sizeof(c0c3));
-        } else {
-            nbh = srs_chunk_header_c3(mh->perfer_cid, (uint32_t)mh->timestamp, c0c3, sizeof(c0c3));
-        }
-        srs_assert(nbh > 0);;
-        
-        iovec iovs[2];
-        iovs[0].iov_base = c0c3;
-        iovs[0].iov_len = nbh;
-        
-        int payload_size = srs_min((int)(end - p), out_chunk_size);
-        iovs[1].iov_base = p;
-        iovs[1].iov_len = payload_size;
-        p += payload_size;
-        
-        if ((err = skt->writev(iovs, 2, NULL)) != srs_success) {
-            return srs_error_wrap(err, "writev packet");
-        }
+    if ((err = on_send_packet(&msg->header, packet)) != srs_success) {
+        return srs_error_wrap(err, "on send packet");
     }
     
     return err;
@@ -787,6 +778,9 @@ srs_error_t SrsProtocol::do_decode_message(SrsMessageHeader& header, SrsBuffer* 
         return packet->decode(stream);
     } else if (header.is_window_ackledgement_size()) {
         *ppacket = packet = new SrsSetWindowAckSizePacket();
+        return packet->decode(stream);
+    } else if (header.is_ackledgement()) {
+        *ppacket = packet = new SrsAcknowledgementPacket();
         return packet->decode(stream);
     } else if (header.is_set_chunk_size()) {
         *ppacket = packet = new SrsSetChunkSizePacket();
@@ -1055,18 +1049,18 @@ srs_error_t SrsProtocol::read_message_header(SrsChunkStream* chunk, char fmt)
         // 0x00 0x06            where: event Ping(0x06)
         // 0x00 0x00 0x0d 0x0f  where: event data 4bytes ping timestamp.
         // @see: https://github.com/ossrs/srs/issues/98
-        if (chunk->cid == RTMP_CID_ProtocolControl && fmt == RTMP_FMT_TYPE1) {
-            srs_warn("accept cid=2, fmt=1 to make librtmp happy.");
+        if (fmt == RTMP_FMT_TYPE1) {
+            srs_warn("fresh chunk starts with fmt=1");
         } else {
             // must be a RTMP protocol level error.
-            return srs_error_new(ERROR_RTMP_CHUNK_START, "chunk is fresh, fmt must be %d, actual is %d. cid=%d", RTMP_FMT_TYPE0, fmt, chunk->cid);
+            return srs_error_new(ERROR_RTMP_CHUNK_START, "fresh chunk expect fmt=0, actual=%d, cid=%d", fmt, chunk->cid);
         }
     }
     
     // when exists cache msg, means got an partial message,
     // the fmt must not be type0 which means new message.
     if (chunk->msg && fmt == RTMP_FMT_TYPE0) {
-        return srs_error_new(ERROR_RTMP_CHUNK_START, "chunk exists, fmt must not be %d, actual is %d", RTMP_FMT_TYPE0, fmt);
+        return srs_error_new(ERROR_RTMP_CHUNK_START, "for existed chunk, fmt should not be 0");
     }
     
     // create msg when new chunk stream start
@@ -1672,7 +1666,7 @@ void SrsHandshakeBytes::dispose()
     srs_freepa(c2);
 }
 
-srs_error_t SrsHandshakeBytes::read_c0c1(ISrsProtocolReadWriter* io)
+srs_error_t SrsHandshakeBytes::read_c0c1(ISrsProtocolReader* io)
 {
     srs_error_t err = srs_success;
     
@@ -1710,7 +1704,7 @@ srs_error_t SrsHandshakeBytes::read_c0c1(ISrsProtocolReadWriter* io)
     return err;
 }
 
-srs_error_t SrsHandshakeBytes::read_s0s1s2(ISrsProtocolReadWriter* io)
+srs_error_t SrsHandshakeBytes::read_s0s1s2(ISrsProtocolReader* io)
 {
     srs_error_t err = srs_success;
     
@@ -1728,7 +1722,7 @@ srs_error_t SrsHandshakeBytes::read_s0s1s2(ISrsProtocolReadWriter* io)
     return err;
 }
 
-srs_error_t SrsHandshakeBytes::read_c2(ISrsProtocolReadWriter* io)
+srs_error_t SrsHandshakeBytes::read_c2(ISrsProtocolReader* io)
 {
     srs_error_t err = srs_success;
     
@@ -1896,20 +1890,9 @@ srs_error_t SrsRtmpClient::handshake()
     SrsAutoFree(SrsComplexHandshake, complex_hs);
     
     if ((err = complex_hs->handshake_with_server(hs_bytes, io)) != srs_success) {
-        if (srs_error_code(err) == ERROR_RTMP_TRY_SIMPLE_HS) {
-            srs_freep(err);
-            
-            // always alloc object at heap.
-            // @see https://github.com/ossrs/srs/issues/509
-            SrsSimpleHandshake* simple_hs = new SrsSimpleHandshake();
-            SrsAutoFree(SrsSimpleHandshake, simple_hs);
-            
-            if ((err = simple_hs->handshake_with_server(hs_bytes, io)) != srs_success) {
-                return srs_error_wrap(err, "simple handshake");
-            }
-        } else {
-            return srs_error_wrap(err, "complex handshake");
-        }
+        // As client, we never verify s0s1s2, because some server doesn't follow the RTMP spec.
+        // So we never have chance to use simple handshake.
+        return srs_error_wrap(err, "complex handshake");
     }
     
     hs_bytes->dispose();
@@ -2398,7 +2381,8 @@ srs_error_t SrsRtmpServer::response_connect_app(SrsRequest *req, const char* ser
     srs_error_t err = srs_success;
     
     SrsConnectAppResPacket* pkt = new SrsConnectAppResPacket();
-    
+
+    // @remark For windows, there must be a space between const string and macro.
     pkt->props->set("fmsVer", SrsAmf0Any::str("FMS/" RTMP_SIG_FMS_VER));
     pkt->props->set("capabilities", SrsAmf0Any::number(127));
     pkt->props->set("mode", SrsAmf0Any::number(1));
@@ -2539,7 +2523,7 @@ srs_error_t SrsRtmpServer::identify_client(int stream_id, SrsRtmpConnType& type,
         SrsAutoFree(SrsPacket, pkt);
         
         if (dynamic_cast<SrsCreateStreamPacket*>(pkt)) {
-            return identify_create_stream_client(dynamic_cast<SrsCreateStreamPacket*>(pkt), stream_id, type, stream_name, duration);
+            return identify_create_stream_client(dynamic_cast<SrsCreateStreamPacket*>(pkt), stream_id, 3, type, stream_name, duration);
         }
         if (dynamic_cast<SrsFMLEStartPacket*>(pkt)) {
             return identify_fmle_publish_client(dynamic_cast<SrsFMLEStartPacket*>(pkt), type, stream_name);
@@ -2547,6 +2531,7 @@ srs_error_t SrsRtmpServer::identify_client(int stream_id, SrsRtmpConnType& type,
         if (dynamic_cast<SrsPlayPacket*>(pkt)) {
             return identify_play_client(dynamic_cast<SrsPlayPacket*>(pkt), type, stream_name, duration);
         }
+
         // call msg,
         // support response null first,
         // @see https://github.com/ossrs/srs/issues/106
@@ -2699,7 +2684,7 @@ srs_error_t SrsRtmpServer::on_play_client_pause(int stream_id, bool is_pause)
                 return srs_error_wrap(err, "send NetStream.Unpause.Notify");
             }
         }
-        // StreanBegin
+        // StreamBegin
         if (true) {
             SrsUserControlPacket* pkt = new SrsUserControlPacket();
             
@@ -2910,9 +2895,13 @@ srs_error_t SrsRtmpServer::start_flash_publish(int stream_id)
     return err;
 }
 
-srs_error_t SrsRtmpServer::identify_create_stream_client(SrsCreateStreamPacket* req, int stream_id, SrsRtmpConnType& type, string& stream_name, srs_utime_t& duration)
+srs_error_t SrsRtmpServer::identify_create_stream_client(SrsCreateStreamPacket* req, int stream_id, int depth, SrsRtmpConnType& type, string& stream_name, srs_utime_t& duration)
 {
     srs_error_t err = srs_success;
+
+    if (depth <= 0) {
+        return srs_error_new(ERROR_RTMP_CREATE_STREAM_DEPTH, "create stream recursive depth");
+    }
     
     if (true) {
         SrsCreateStreamResPacket* pkt = new SrsCreateStreamResPacket(req->transaction_id, stream_id);
@@ -2953,7 +2942,7 @@ srs_error_t SrsRtmpServer::identify_create_stream_client(SrsCreateStreamPacket* 
             return identify_flash_publish_client(dynamic_cast<SrsPublishPacket*>(pkt), type, stream_name);
         }
         if (dynamic_cast<SrsCreateStreamPacket*>(pkt)) {
-            return identify_create_stream_client(dynamic_cast<SrsCreateStreamPacket*>(pkt), stream_id, type, stream_name, duration);
+            return identify_create_stream_client(dynamic_cast<SrsCreateStreamPacket*>(pkt), stream_id, depth-1, type, stream_name, duration);
         }
         if (dynamic_cast<SrsFMLEStartPacket*>(pkt)) {
             return identify_haivision_publish_client(dynamic_cast<SrsFMLEStartPacket*>(pkt), type, stream_name);

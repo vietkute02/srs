@@ -1,7 +1,7 @@
 /**
  * The MIT License (MIT)
  *
- * Copyright (c) 2013-2019 Winlin
+ * Copyright (c) 2013-2020 Winlin
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -116,6 +116,8 @@
 ///////////////////////////////////////////////////////////
 #define SRS_CONSTS_NULL_FILE "/dev/null"
 #define SRS_CONSTS_LOCALHOST "127.0.0.1"
+#define SRS_CONSTS_LOOPBACK "0.0.0.0"
+#define SRS_CONSTS_LOOPBACK6 "::"
 
 // The signal defines.
 // To reload the config file and apply new config.
@@ -211,7 +213,7 @@
 #define SRS_CONSTS_HTTP_QUERY_SEP '?'
 
 // The default recv timeout.
-#define SRS_HTTP_RECV_TIMEOUT (60 * SRS_UTIME_SECONDS)
+#define SRS_HTTP_RECV_TIMEOUT (15 * SRS_UTIME_SECONDS)
 
 // 6.1.1 Status Code and Reason Phrase
 #define SRS_CONSTS_HTTP_Continue                       100

@@ -1,7 +1,7 @@
 /**
  * The MIT License (MIT)
  *
- * Copyright (c) 2013-2019 Winlin
+ * Copyright (c) 2013-2020 Winlin
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -139,7 +139,8 @@ srs_error_t SrsBasicRtmpClient::do_connect_app(string local_ip, bool debug)
     // upnode server identity will show in the connect_app of client.
     // @see https://github.com/ossrs/srs/issues/160
     // the debug_srs_upnode is config in vhost and default to true.
-    if ((err = client->connect_app(req->app, tc_url, req, debug, NULL)) != srs_success) {
+    SrsServerInfo si;
+    if ((err = client->connect_app(req->app, tc_url, req, debug, &si)) != srs_success) {
         return srs_error_wrap(err, "connect app tcUrl=%s, debug=%d", tc_url.c_str(), debug);
     }
     
