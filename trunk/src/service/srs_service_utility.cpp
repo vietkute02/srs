@@ -310,8 +310,8 @@ string srs_get_public_internet_address()
         }
         srs_warn("use public address as ip: %s", ip.c_str());
         
-        _public_internet_address = ip;
-        return ip;
+        // _public_internet_address = ip;
+        // return ip;
     }
     
     // no public address, use private address.
