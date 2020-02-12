@@ -735,10 +735,25 @@ SrsConfDirective* SrsConfDirective::get_or_create(string n, string a0)
     if (!conf) {
         conf = new SrsConfDirective();
         conf->name = n;
-        conf->set_arg0(a0);
+        conf->args.push_back(a0);
         directives.push_back(conf);
     }
     
+    return conf;
+}
+
+SrsConfDirective* SrsConfDirective::get_or_create(string n, string a0, string a1)
+{
+    SrsConfDirective* conf = get(n, a0);
+
+    if (!conf) {
+        conf = new SrsConfDirective();
+        conf->name = n;
+        conf->args.push_back(a0);
+        conf->args.push_back(a1);
+        directives.push_back(conf);
+    }
+
     return conf;
 }
 
@@ -3472,6 +3487,7 @@ srs_error_t SrsConfig::check_normal_config()
             && n != "http_api" && n != "stats" && n != "vhost" && n != "pithy_print_ms"
             && n != "http_server" && n != "stream_caster"
             && n != "utc_time" && n != "work_dir" && n != "asprocess"
+            && n != "ff_log_level"
             ) {
             return srs_error_new(ERROR_SYSTEM_CONFIG_INVALID, "illegal directive %s", n.c_str());
         }
@@ -5749,13 +5765,13 @@ string SrsConfig::get_log_file()
     return conf->arg0();
 }
 
-bool SrsConfig::get_ffmpeg_log_enabled()
+bool SrsConfig::get_ff_log_enabled()
 {
-    string log = get_ffmpeg_log_dir();
+    string log = get_ff_log_dir();
     return log != SRS_CONSTS_NULL_FILE;
 }
 
-string SrsConfig::get_ffmpeg_log_dir()
+string SrsConfig::get_ff_log_dir()
 {
     static string DEFAULT = "./objs";
     
@@ -5764,6 +5780,18 @@ string SrsConfig::get_ffmpeg_log_dir()
         return DEFAULT;
     }
     
+    return conf->arg0();
+}
+
+string SrsConfig::get_ff_log_level()
+{
+    static string DEFAULT = "info";
+
+    SrsConfDirective* conf = root->get("ff_log_level");
+    if (!conf || conf->arg0().empty()) {
+        return DEFAULT;
+    }
+
     return conf->arg0();
 }
 
@@ -6771,22 +6799,22 @@ string SrsConfig::get_vhost_http_dir(string vhost)
 bool SrsConfig::get_vhost_http_remux_enabled(string vhost)
 {
     static bool DEFAULT = false;
-    
+
     SrsConfDirective* conf = get_vhost(vhost);
     if (!conf) {
         return DEFAULT;
     }
-    
+
     conf = conf->get("http_remux");
     if (!conf) {
         return DEFAULT;
     }
-    
+
     conf = conf->get("enabled");
     if (!conf || conf->arg0().empty()) {
         return DEFAULT;
     }
-    
+
     return SRS_CONF_PERFER_FALSE(conf->arg0());
 }
 

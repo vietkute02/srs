@@ -154,7 +154,7 @@ int64_t SrsRtmpJitter::get_time()
 SrsFastVector::SrsFastVector()
 {
     count = 0;
-    nb_msgs = SRS_PERF_MW_MSGS * 8;
+    nb_msgs = 8;
     msgs = new SrsSharedPtrMessage*[nb_msgs];
 }
 
@@ -212,12 +212,12 @@ void SrsFastVector::push_back(SrsSharedPtrMessage* msg)
 {
     // increase vector.
     if (count >= nb_msgs) {
-        int size = nb_msgs * 2;
+        int size = srs_max(SRS_PERF_MW_MSGS * 8, nb_msgs * 2);
         SrsSharedPtrMessage** buf = new SrsSharedPtrMessage*[size];
         for (int i = 0; i < nb_msgs; i++) {
             buf[i] = msgs[i];
         }
-        srs_warn("fast vector incrase %d=>%d", nb_msgs, size);
+        srs_info("fast vector incrase %d=>%d", nb_msgs, size);
         
         // use new array.
         srs_freepa(msgs);
@@ -903,6 +903,11 @@ srs_error_t SrsOriginHub::cycle()
     return err;
 }
 
+bool SrsOriginHub::active()
+{
+    return is_active;
+}
+
 srs_error_t SrsOriginHub::on_meta_data(SrsSharedPtrMessage* shared_metadata, SrsOnMetaDataPacket* packet)
 {
     srs_error_t err = srs_success;
@@ -1046,6 +1051,12 @@ srs_error_t SrsOriginHub::on_video(SrsSharedPtrMessage* shared_video, bool is_se
                   msg->size, c->id, srs_avc_profile2str(c->avc_profile).c_str(),
                   srs_avc_level2str(c->avc_level).c_str(), c->width, c->height,
                   c->video_data_rate / 1000, c->frame_rate, c->duration);
+    }
+
+    // Ignore video data when no sps/pps
+    // @bug https://github.com/ossrs/srs/issues/703#issuecomment-578393155
+    if (format->vcodec && !format->vcodec->is_avc_codec_ok()) {
+        return err;
     }
     
     if ((err = hls->on_video(msg, format)) != srs_success) {
@@ -1635,11 +1646,30 @@ srs_error_t SrsMetaCache::update_vsh(SrsSharedPtrMessage* msg)
     return vformat->on_video(msg);
 }
 
-std::map<std::string, SrsSource*> SrsSource::pool;
+SrsSourceManager* _srs_sources = new SrsSourceManager();
 
-srs_error_t SrsSource::fetch_or_create(SrsRequest* r, ISrsSourceHandler* h, SrsSource** pps)
+SrsSourceManager::SrsSourceManager()
+{
+    lock = NULL;
+}
+
+SrsSourceManager::~SrsSourceManager()
+{
+    srs_mutex_destroy(lock);
+}
+
+srs_error_t SrsSourceManager::fetch_or_create(SrsRequest* r, ISrsSourceHandler* h, SrsSource** pps)
 {
     srs_error_t err = srs_success;
+
+    // Lazy create lock, because ST is not ready in SrsSourceManager constructor.
+    if (!lock) {
+        lock = srs_mutex_new();
+    }
+
+    // Use lock to protect coroutine switch.
+    // @bug https://github.com/ossrs/srs/issues/1230
+    SrsLocker(lock);
     
     SrsSource* source = NULL;
     if ((source = fetch(r)) != NULL) {
@@ -1665,7 +1695,7 @@ srs_error_t SrsSource::fetch_or_create(SrsRequest* r, ISrsSourceHandler* h, SrsS
     return err;
 }
 
-SrsSource* SrsSource::fetch(SrsRequest* r)
+SrsSource* SrsSourceManager::fetch(SrsRequest* r)
 {
     SrsSource* source = NULL;
     
@@ -1679,12 +1709,12 @@ SrsSource* SrsSource::fetch(SrsRequest* r)
     // we always update the request of resource,
     // for origin auth is on, the token in request maybe invalid,
     // and we only need to update the token of request, it's simple.
-    source->req->update_auth(r);
+    source->update_auth(r);
     
     return source;
 }
 
-void SrsSource::dispose_all()
+void SrsSourceManager::dispose()
 {
     std::map<std::string, SrsSource*>::iterator it;
     for (it = pool.begin(); it != pool.end(); ++it) {
@@ -1694,16 +1724,16 @@ void SrsSource::dispose_all()
     return;
 }
 
-srs_error_t SrsSource::cycle_all()
+srs_error_t SrsSourceManager::cycle()
 {
     int cid = _srs_context->get_id();
-    srs_error_t err = do_cycle_all();
+    srs_error_t err = do_cycle();
     _srs_context->set_id(cid);
     
     return err;
 }
 
-srs_error_t SrsSource::do_cycle_all()
+srs_error_t SrsSourceManager::do_cycle()
 {
     srs_error_t err = srs_success;
     
@@ -1744,7 +1774,7 @@ srs_error_t SrsSource::do_cycle_all()
     return err;
 }
 
-void SrsSource::destroy()
+void SrsSourceManager::destroy()
 {
     std::map<std::string, SrsSource*>::iterator it;
     for (it = pool.begin(); it != pool.end(); ++it) {
@@ -1992,6 +2022,11 @@ int SrsSource::pre_source_id()
 bool SrsSource::inactive()
 {
     return _can_publish;
+}
+
+void SrsSource::update_auth(SrsRequest* r)
+{
+    req->update_auth(r);
 }
 
 bool SrsSource::can_publish(bool is_edge)
@@ -2439,10 +2474,10 @@ srs_error_t SrsSource::create_consumer(SrsConnection* conn, SrsConsumer*& consum
     
     consumer = new SrsConsumer(this, conn);
     consumers.push_back(consumer);
-    
+
     srs_utime_t queue_size = _srs_config->get_queue_length(req->vhost);
     consumer->set_queue_size(queue_size);
-    
+
     // if atc, update the sequence header to gop cache time.
     if (atc && !gop_cache->empty()) {
         if (meta->data()) {
@@ -2455,22 +2490,25 @@ srs_error_t SrsSource::create_consumer(SrsConnection* conn, SrsConsumer*& consum
             meta->ash()->timestamp = srsu2ms(gop_cache->start_time());
         }
     }
-    
-    // Copy metadata and sequence header to consumer.
-    if ((err = meta->dumps(consumer, atc, jitter_algorithm, dm, ds)) != srs_success) {
-        return srs_error_wrap(err, "meta dumps");
+
+    // If stream is publishing, dumps the sequence header and gop cache.
+    if (hub->active()) {
+        // Copy metadata and sequence header to consumer.
+        if ((err = meta->dumps(consumer, atc, jitter_algorithm, dm, ds)) != srs_success) {
+            return srs_error_wrap(err, "meta dumps");
+        }
+
+        // copy gop cache to client.
+        if (dg && (err = gop_cache->dump(consumer, atc, jitter_algorithm)) != srs_success) {
+            return srs_error_wrap(err, "gop cache dumps");
+        }
     }
-    
-    // copy gop cache to client.
-    if (dg && (err = gop_cache->dump(consumer, atc, jitter_algorithm)) != srs_success) {
-        return srs_error_wrap(err, "gop cache dumps");
-    }
-    
+
     // print status.
     if (dg) {
-        srs_trace("create consumer, queue_size=%.2f, jitter=%d", queue_size, jitter_algorithm);
+        srs_trace("create consumer, active=%d, queue_size=%.2f, jitter=%d", hub->active(), queue_size, jitter_algorithm);
     } else {
-        srs_trace("create consumer, ignore gop cache, jitter=%d", jitter_algorithm);
+        srs_trace("create consumer, active=%d, ignore gop cache, jitter=%d", hub->active(), jitter_algorithm);
     }
     
     // for edge, when play edge stream, check the state

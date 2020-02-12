@@ -520,10 +520,11 @@ void SrsServer::dispose()
     close_listeners(SrsListenerRtsp);
     close_listeners(SrsListenerFlv);
     
-    // @remark don't dispose ingesters, for too slow.
+    // Fast stop to notify FFMPEG to quit, wait for a while then fast kill.
+    ingester->dispose();
     
     // dispose the source for hls and dvr.
-    SrsSource::dispose_all();
+    _srs_sources->dispose();
     
     // @remark don't dispose all connections, for too slow.
     
@@ -856,17 +857,14 @@ void SrsServer::on_signal(int signo)
         srs_trace("gmc is on, main cycle will terminate normally.");
         signal_gmc_stop = true;
 #else
-        srs_trace("user terminate program");
-#ifdef SRS_AUTO_MEM_WATCH
+        #ifdef SRS_AUTO_MEM_WATCH
         srs_memory_report();
+        #endif
 #endif
-        exit(0);
-#endif
-        return;
     }
     
-    if (signo == SRS_SIGNAL_GRACEFULLY_QUIT && !signal_gracefully_quit) {
-        srs_trace("user terminate program, gracefully quit.");
+    if ((signo == SIGINT || signo == SRS_SIGNAL_GRACEFULLY_QUIT) && !signal_gracefully_quit) {
+        srs_trace("sig=%d, user terminate program, gracefully quit", signo);
         signal_gracefully_quit = true;
         return;
     }
@@ -952,7 +950,7 @@ srs_error_t SrsServer::do_cycle()
             }
             
             // notice the stream sources to cycle.
-            if ((err = SrsSource::cycle_all()) != srs_success) {
+            if ((err = _srs_sources->cycle()) != srs_success) {
                 return srs_error_wrap(err, "source cycle");
             }
             
