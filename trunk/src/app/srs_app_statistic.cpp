@@ -81,9 +81,10 @@ srs_error_t SrsStatisticVhost::dumps(SrsJsonObject* obj)
     
     SrsJsonObject* okbps = SrsJsonAny::object();
     obj->set("kbps", okbps);
-    
     okbps->set("recv_30s", SrsJsonAny::integer(kbps->get_recv_kbps_30s()));
     okbps->set("send_30s", SrsJsonAny::integer(kbps->get_send_kbps_30s()));
+    okbps->set("recv_5s", SrsJsonAny::integer(kbps->get_recv_kbps_5s()));
+    okbps->set("send_5s", SrsJsonAny::integer(kbps->get_send_kbps_5s()));
     
     SrsJsonObject* hls = SrsJsonAny::object();
     obj->set("hls", hls);
@@ -149,6 +150,8 @@ srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
     
     okbps->set("recv_30s", SrsJsonAny::integer(kbps->get_recv_kbps_30s()));
     okbps->set("send_30s", SrsJsonAny::integer(kbps->get_send_kbps_30s()));
+    okbps->set("recv_5s", SrsJsonAny::integer(kbps->get_recv_kbps_5s()));
+    okbps->set("send_5s", SrsJsonAny::integer(kbps->get_send_kbps_5s()));
     
     SrsJsonObject* publish = SrsJsonAny::object();
     obj->set("publish", publish);
