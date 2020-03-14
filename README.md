@@ -146,6 +146,13 @@ For previous versions, please read:
 
 ## V3 changes
 
+* v3.0, 2020-03-12, For [#1635][bug #1635], inotify watch ConfigMap for reload. 3.0.134
+* v3.0, 2020-03-12, For [#1635][bug #1635], support auto reaload config by inotify. 3.0.129
+* v3.0, 2020-03-12, For [#1630][bug #1630], disable cache for stream changing, and drop dup header. 3.0.128
+* v3.0, 2020-03-12, For [#1594][bug #1594], detect and disable daemon for docker. 3.0.127
+* v3.0, 2020-03-12, For [#1634][bug #1634], always check status in thread loop. 3.0.126
+* v3.0, 2020-03-11, For [#1634][bug #1634], refactor output with datetime for ingest/encoder/exec. 3.0.125
+* v3.0, 2020-03-11, For [#1634][bug #1634], fix quit by accident SIGTERM while killing FFMPEG. 3.0.124
 * <strong>v3.0, 2020-03-05, [3.0 beta2(3.0.123)][r3.0b2] released. 122170 lines.</strong>
 * v3.0, 2020-02-21, For [#1598][bug #1598], support SLB health checking by TCP. 3.0.123
 * v3.0, 2020-02-21, Fix bug for librtmp client ipv4/ipv6 socket. 3.0.122
@@ -1660,7 +1667,11 @@ Winlin
 [bug #1601]: https://github.com/ossrs/srs/issues/1601
 [bug #1579]: https://github.com/ossrs/srs/issues/1579
 [bug #1598]: https://github.com/ossrs/srs/issues/1598
-[bug #xxxxxxxxxxxxx]: https://github.com/ossrs/srs/issues/xxxxxxxxxxxxx
+[bug #1634]: https://github.com/ossrs/srs/issues/1634
+[bug #1594]: https://github.com/ossrs/srs/issues/1594
+[bug #1630]: https://github.com/ossrs/srs/issues/1630
+[bug #1635]: https://github.com/ossrs/srs/issues/1635
+[bug #yyyyyyyyyyyyy]: https://github.com/ossrs/srs/issues/yyyyyyyyyyyyy
 
 [exo #828]: https://github.com/google/ExoPlayer/pull/828
 
