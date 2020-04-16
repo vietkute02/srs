@@ -1303,8 +1303,11 @@ srs_error_t SrsRtmpConn::http_hooks_on_publish()
     
     for (int i = 0; i < (int)hooks.size(); i++) {
         std::string url = hooks.at(i);
-        if ((err = SrsHttpHooks::on_publish(url, req)) != srs_success) {
-            return srs_error_wrap(err, "rtmp on_publish %s", url.c_str());
+        // if ((err = SrsHttpHooks::on_publish(url, req)) != srs_success) {
+        //     return srs_error_wrap(err, "rtmp on_publish %s", url.c_str());
+        // }
+        if ((err = SrsHttpHooks::on_publish(url, req)) == srs_success) {
+            break;
         }
     }
     
