@@ -1,4 +1,4 @@
-# SRS
+# SRS(Simple Realtime Server)
 
 ![](http://ossrs.net/gif/v1/sls.gif?site=github.com&path=/srs/srs3)
 [![](https://circleci.com/gh/ossrs/srs/tree/3.0release.svg?style=svg&circle-token=1ef1d5b5b0cde6c8c282ed856a18199f9e8f85a9)](https://circleci.com/gh/ossrs/srs/tree/3.0release)
@@ -32,7 +32,7 @@ cd srs/trunk && git remote set-url origin https://github.com/ossrs/srs.git && gi
 
 > Note: You can also build SRS in docker, please read [docker][docker-dev].
 
-**Step 3:** Run SRS 
+**>>> Step 3:** Run SRS 
 
 ```
 ./objs/srs -c conf/srs.conf
@@ -55,16 +55,12 @@ docker run -p 1935:1935 -p 1985:1985 -p 8080:8080 \
 * Usage: How to delivery HTTP FLV Live Streaming?([CN][v3_CN_SampleHttpFlv], [EN][v3_EN_SampleHttpFlv])
 * Usage: How to delivery HTTP FLV Live Streaming Cluster?([CN][v3_CN_SampleHttpFlvCluster], [EN][v3_EN_SampleHttpFlvCluster])
 * Usage: How to delivery HLS?([CN][v3_CN_SampleHLS], [EN][v3_EN_SampleHLS])
-* Usage: How to delivery HLS for other codec?([CN][v3_CN_SampleTranscode2HLS], [EN][v3_EN_SampleTranscode2HLS])
 * Usage: How to transode RTMP stream by FFMPEG?([CN][v2_CN_SampleFFMPEG], [EN][v2_EN_SampleFFMPEG])
 * Usage: How to forward stream to other servers?([CN][v3_CN_SampleForward], [EN][v3_EN_SampleForward])
 * Usage: How to deploy in low lantency mode?([CN][v3_CN_SampleRealtime], [EN][v3_EN_SampleRealtime])
 * Usage: How to ingest file/stream/device to RTMP?([CN][v1_CN_SampleIngest], [EN][v1_EN_SampleIngest])
-* Usage: How to delivery HLS by SRS HTTP server?([CN][v3_CN_SampleHTTP], [EN][v3_EN_SampleHTTP])
-* Usage: How to publish h.264 raw stream as RTMP? ([CN][v3_CN_SrsLibrtmp2], [EN][v3_EN_SrsLibrtmp2])
-* Usage: How to improve edge performance by multiple CPUs? ([CN][v3_CN_REUSEPORT], [EN][v3_EN_REUSEPORT])
-* Usage: Why choose SRS? About the milestone and product plan? ([CN][v1_CN_Product], [EN][v1_EN_Product])
-* Usage: How to file bug or chat with us? ([CN][v1_CN_Contact], [EN][v1_EN_Contact])
+* Usage: How to improve edge performance for multiple CPUs? ([CN][v3_CN_REUSEPORT], [EN][v3_EN_REUSEPORT])
+* Usage: How to file a bug or contact us? ([CN][v1_CN_Contact], [EN][v1_EN_Contact])
 
 <a name="srs-30-wiki"></a>
 ## Wiki
@@ -149,6 +145,21 @@ For previous versions, please read:
 
 ## V3 changes
 
+* <strong>v3.0, 2020-10-31, [3.0 release2(3.0.153)][r3.0r2] released. 122663 lines.</strong>
+* v3.0, 2020-10-31, Fix [#509][bug #509], Always malloc stack on heap. 3.0.153
+* v3.0, 2020-10-31, Remove some global elements for debugging. 3.0.152
+* v3.0, 2020-10-31, Use global _srs_server for debugging. 3.0.151
+* v3.0, 2020-10-31, Refine source cid, track previous one. 3.0.150
+* v3.0, 2020-10-25, Add hls.realtime.conf for low-latency HLS. 3.0.149
+* v3.0, 2020-10-24, Refine script and startup logs. 3.0.148
+* v3.0, 2020-10-23, Allow FFmpeg if exists at /usr/local/bin/ffmpeg. 3.0.147
+* v3.0, 2020-10-23, Refine build script, use libssl in docker. 3.0.146
+* v3.0, 2020-10-14, Fix [#1987][bug #1987], Fix Kbps resample bug. 3.0.145
+* <strong>v3.0, 2020-10-10, [3.0 release1(3.0.144)][r3.0r1] released. 122674 lines.</strong>
+* v3.0, 2020-10-10, Fix [#1780][bug #1780], build fail on Ubuntu20(focal). 3.0.144
+* v3.0, 2020-09-14, Prevent stop ingest for multiple times. 3.0.143
+* v3.0, 2020-09-10, RTC: Change SO_REUSEPORT fail to warning. 3.0.142
+* <strong>v3.0, 2020-06-27, [3.0 release0(3.0.141)][r3.0r0] released. 122674 lines.</strong>
 * v3.0, 2020-03-30, For [#1672][bug #1672], fix dvr close file failed bug. 3.0.140
 * <strong>v3.0, 2020-03-29, [3.0 beta4(3.0.139)][r3.0b4] released. 122674 lines.</strong>
 * v3.0, 2020-03-28, Support multiple OS/Platform build cache. 3.0.139
@@ -763,6 +774,9 @@ For previous versions, please read:
 
 ## Releases
 
+* 2020-10-31, [Release v3.0-r2][r3.0r2], 3.0 release2, 3.0.153, 122663 lines.
+* 2020-10-10, [Release v3.0-r1][r3.0r1], 3.0 release1, 3.0.144, 122674 lines.
+* 2020-06-27, [Release v3.0-r0][r3.0r0], 3.0 release0, 3.0.141, 122674 lines.
 * 2020-03-29, [Release v3.0-b3][r3.0b4], 3.0 beta4, 3.0.139, 122674 lines.
 * 2020-03-18, [Release v3.0-b3][r3.0b3], 3.0 beta3, 3.0.134, 122509 lines.
 * 2020-03-05, [Release v3.0-b2][r3.0b2], 3.0 beta2, 3.0.123, 122170 lines.
@@ -1626,6 +1640,7 @@ Winlin
 [bug #1488]: https://github.com/ossrs/srs/issues/1488
 [bug #1551]: https://github.com/ossrs/srs/pull/1551
 [bug #1554]: https://github.com/ossrs/srs/pull/1554
+[bug #1672]: https://github.com/ossrs/srs/issues/1672
 [bug #xxxxxxxxxx]: https://github.com/ossrs/srs/issues/xxxxxxxxxx
 
 [bug #735]: https://github.com/ossrs/srs/issues/735
@@ -1690,10 +1705,15 @@ Winlin
 [bug #1651]: https://github.com/ossrs/srs/issues/1651
 [bug #1619]: https://github.com/ossrs/srs/issues/1619
 [bug #1629]: https://github.com/ossrs/srs/issues/1629
+[bug #1780]: https://github.com/ossrs/srs/issues/1780
+[bug #1987]: https://github.com/ossrs/srs/issues/1987
 [bug #yyyyyyyyyyyyy]: https://github.com/ossrs/srs/issues/yyyyyyyyyyyyy
 
 [exo #828]: https://github.com/google/ExoPlayer/pull/828
 
+[r3.0r2]: https://github.com/ossrs/srs/releases/tag/v3.0-r2
+[r3.0r1]: https://github.com/ossrs/srs/releases/tag/v3.0-r1
+[r3.0r0]: https://github.com/ossrs/srs/releases/tag/v3.0-r0
 [r3.0b4]: https://github.com/ossrs/srs/releases/tag/v3.0-b4
 [r3.0b3]: https://github.com/ossrs/srs/releases/tag/v3.0-b3
 [r3.0b2]: https://github.com/ossrs/srs/releases/tag/v3.0-b2
