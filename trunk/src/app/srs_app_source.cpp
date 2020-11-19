@@ -1748,6 +1748,9 @@ SrsSource* SrsSourceManager::fetch(SrsRequest* r)
 
 void SrsSourceManager::dispose()
 {
+	if (!lock)
+		lock = srs_mutex_new();
+	SrsLocker(lock);
     std::map<std::string, SrsSource*>::iterator it;
     for (it = pool.begin(); it != pool.end(); ++it) {
         SrsSource* source = it->second;
@@ -1768,7 +1771,9 @@ srs_error_t SrsSourceManager::cycle()
 srs_error_t SrsSourceManager::do_cycle()
 {
     srs_error_t err = srs_success;
-    
+	if (!lock)
+		lock = srs_mutex_new();
+	SrsLocker(lock);
     std::map<std::string, SrsSource*>::iterator it;
     for (it = pool.begin(); it != pool.end();) {
         SrsSource* source = it->second;
@@ -1781,7 +1786,7 @@ srs_error_t SrsSourceManager::do_cycle()
         // TODO: FIXME: support source cleanup.
         // @see https://github.com/ossrs/srs/issues/713
         // @see https://github.com/ossrs/srs/issues/714
-#if 0
+#if 1
         // When source expired, remove it.
         if (source->expired()) {
             int cid = source->source_id();
@@ -1808,6 +1813,9 @@ srs_error_t SrsSourceManager::do_cycle()
 
 void SrsSourceManager::destroy()
 {
+    srs_error_t err = srs_success;
+	if (!lock)
+		lock = srs_mutex_new();
     std::map<std::string, SrsSource*>::iterator it;
     for (it = pool.begin(); it != pool.end(); ++it) {
         SrsSource* source = it->second;
@@ -1838,6 +1846,7 @@ SrsSource::SrsSource()
     
     _srs_config->subscribe(this);
     atc = false;
+    handler = NULL;
 }
 
 SrsSource::~SrsSource()
@@ -2056,6 +2065,8 @@ bool SrsSource::inactive()
 void SrsSource::update_auth(SrsRequest* r)
 {
     req->update_auth(r);
+    //reset stream state
+    die_at = 0;
 }
 
 bool SrsSource::can_publish(bool is_edge)

@@ -436,7 +436,7 @@ srs_error_t SrsDvrFlvSegmenter::close_encoder()
 
 SrsDvrMp4Segmenter::SrsDvrMp4Segmenter()
 {
-    enc = new SrsMp4Encoder();
+    enc = NULL;//new SrsMp4Encoder();
 }
 
 SrsDvrMp4Segmenter::~SrsDvrMp4Segmenter()
@@ -527,6 +527,7 @@ srs_error_t SrsDvrMp4Segmenter::close_encoder()
     srs_error_t err = srs_success;
     
     if ((err = enc->flush()) != srs_success) {
+    	srs_freep(enc);
         return srs_error_wrap(err, "flush encoder");
     }
     
