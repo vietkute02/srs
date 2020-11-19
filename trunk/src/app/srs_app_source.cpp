@@ -1630,11 +1630,11 @@ srs_error_t SrsMetaCache::update_data(SrsMessageHeader* header, SrsOnMetaDataPac
     srs_trace("got metadata%s", ss.str().c_str());
     
     // add server info to metadata
-    metadata->metadata->set("server", SrsAmf0Any::str(RTMP_SIG_SRS_SERVER));
+    // metadata->metadata->set("server", SrsAmf0Any::str(RTMP_SIG_SRS_SERVER));
 
     // version, for example, 1.0.0
     // add version to metadata, please donot remove it, for debug.
-    metadata->metadata->set("server_version", SrsAmf0Any::str(RTMP_SIG_SRS_VERSION));
+    // metadata->metadata->set("server_version", SrsAmf0Any::str(RTMP_SIG_SRS_VERSION));
     
     // encode the metadata to payload
     int size = 0;
