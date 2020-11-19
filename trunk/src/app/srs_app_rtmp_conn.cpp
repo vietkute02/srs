@@ -870,6 +870,7 @@ srs_error_t SrsRtmpConn::do_publishing(SrsSource* source, SrsPublishRecvThread* 
     
     int64_t nb_msgs = 0;
     uint64_t nb_frames = 0;
+    SrsStatistic::instance()->set_fps_provider(req, rtrd);
     while (true) {
         if ((err = trd->pull()) != srs_success) {
             return srs_error_wrap(err, "rtmp: thread quit");
@@ -917,7 +918,7 @@ srs_error_t SrsRtmpConn::do_publishing(SrsSource* source, SrsPublishRecvThread* 
                 srsu2msi(publish_1stpkt_timeout), srsu2msi(publish_normal_timeout));
         }
     }
-    
+    SrsStatistic::instance()->set_fps_provider(req, NULL);
     return err;
 }
 
