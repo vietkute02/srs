@@ -365,6 +365,9 @@ void SrsPublishRecvThread::stop()
     trd.stop();
 }
 
+SrsIFrame *SrsPublishRecvThread::get_iframes(){
+	return &iframe;
+}
 srs_error_t SrsPublishRecvThread::consume(SrsCommonMessage* msg)
 {
     srs_error_t err = srs_success;
@@ -379,6 +382,9 @@ srs_error_t SrsPublishRecvThread::consume(SrsCommonMessage* msg)
     
     if (msg->header.is_video()) {
         video_frames++;
+        if(SrsFlvVideo::keyframe(msg->payload, msg->size)){
+        	iframe.add(msg->header.timestamp);
+        }
     }
     
     // log to show the time of recv thread.

@@ -135,7 +135,6 @@ public:
     virtual void on_start();
     virtual void on_stop();
 };
-
 // The publish recv thread got message and callback the source method to process message.
 // @see: https://github.com/ossrs/srs/issues/237
 class SrsPublishRecvThread : virtual public ISrsMessagePumper, virtual public ISrsReloadHandler, public SrsFrameProvider
@@ -151,6 +150,7 @@ private:
     int64_t _nb_msgs;
     // The video frames we got.
     uint64_t video_frames;
+    SrsIFrame iframe;
     // For mr(merged read),
     // @see https://github.com/ossrs/srs/issues/241
     bool mr;
@@ -185,6 +185,7 @@ public:
 public:
     virtual srs_error_t start();
     virtual void stop();
+    SrsIFrame *get_iframes();
 // Interface ISrsMessagePumper
 public:
     virtual srs_error_t consume(SrsCommonMessage* msg);
