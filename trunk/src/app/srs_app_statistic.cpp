@@ -200,6 +200,7 @@ srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
 				break;
 			ifrs->add(SrsJsonAny::integer(iframes->pts[index]));
 		}
+		obj->set("pts", SrsJsonAny::integer(iframes->now));
 		obj->set("iframe", ifrs);
 	}
     obj->set("send_bytes", SrsJsonAny::integer(kbps->get_send_bytes()));

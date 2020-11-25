@@ -70,6 +70,7 @@ class SrsIFrame{
 public:
     uint64_t pts[IFRAME_COUNT];
     int index;
+    uint64_t now;
     SrsIFrame();
     void add(uint64_t pts);
 };

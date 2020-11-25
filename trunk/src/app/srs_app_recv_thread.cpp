@@ -385,6 +385,7 @@ srs_error_t SrsPublishRecvThread::consume(SrsCommonMessage* msg)
         if(SrsFlvVideo::keyframe(msg->payload, msg->size)){
         	iframe.add(msg->header.timestamp);
         }
+        iframe.now = msg->header.timestamp;
     }
     
     // log to show the time of recv thread.
