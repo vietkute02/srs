@@ -39,16 +39,16 @@
 #define SRS_XSTR(v) SRS_INTERNAL_STR(v)
 
 // The project informations, may sent to client in HTTP header or RTMP metadata.
-#define RTMP_SIG_SRS_KEY "SRS"
-#define RTMP_SIG_SRS_CODE "OuXuli"
-#define RTMP_SIG_SRS_URL "https://github.com/ossrs/srs"
+#define RTMP_SIG_SRS_KEY "SigmaRTMPServer"
+#define RTMP_SIG_SRS_CODE "Anhlv"
+#define RTMP_SIG_SRS_URL "https://github.com"
 #define RTMP_SIG_SRS_LICENSE "The MIT License (MIT)"
 #define RTMP_SIG_SRS_VERSION SRS_XSTR(VERSION_MAJOR) "." SRS_XSTR(VERSION_MINOR) "." SRS_XSTR(VERSION_REVISION)
 #define RTMP_SIG_SRS_SERVER RTMP_SIG_SRS_KEY "/" RTMP_SIG_SRS_VERSION "(" RTMP_SIG_SRS_CODE ")"
 
 // The current stable release.
-#define VERSION_STABLE 3
-#define VERSION_STABLE_BRANCH SRS_XSTR(VERSION_STABLE) ".0release"
+#define VERSION_STABLE 2
+#define VERSION_STABLE_BRANCH SRS_XSTR(VERSION_STABLE)".0release"
 
 // For 32bit os, 2G big file limit for unistd io,
 // ie. read/write/lseek to use 64bits size for huge file.
