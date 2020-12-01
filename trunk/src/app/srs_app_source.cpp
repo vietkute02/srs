@@ -1745,7 +1745,15 @@ SrsSource* SrsSourceManager::fetch(SrsRequest* r)
     
     return source;
 }
-
+bool SrsSourceManager::has_source(SrsRequest* r){
+	if (!lock)
+		lock = srs_mutex_new();
+	SrsLocker(lock);
+	string stream_url = r->get_stream_url();
+	if (pool.find(stream_url) == pool.end() || pool[stream_url]->inactive())
+		return false;
+	return true;
+}
 void SrsSourceManager::dispose()
 {
 	if (!lock)

@@ -492,14 +492,16 @@ srs_error_t SrsRtmpConn::stream_service_cycle()
     // client is identified, set the timeout to service timeout.
     rtmp->set_recv_timeout(SRS_CONSTS_RTMP_TIMEOUT);
     rtmp->set_send_timeout(SRS_CONSTS_RTMP_TIMEOUT);
-    
+    if(info->type == SrsRtmpConnPlay && !_srs_sources->has_source(req)){
+    	return srs_error_new(ERROR_RTMP_STREAM_NOT_FOUND, "rtmp: no source");
+    }
     // find a source to serve.
     SrsSource* source = NULL;
     if ((err = _srs_sources->fetch_or_create(req, server, &source)) != srs_success) {
         return srs_error_wrap(err, "rtmp: fetch source");
     }
     srs_assert(source != NULL);
-    
+
     // update the statistic when source disconveried.
     SrsStatistic* stat = SrsStatistic::instance();
     if ((err = stat->on_client(_srs_context->get_id(), req, this, info->type)) != srs_success) {
