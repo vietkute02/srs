@@ -150,6 +150,7 @@ srs_error_t SrsHttpHooks::on_publish(string url, SrsRequest* req)
     	ips->add(SrsJsonAny::str(ip.c_str()));
     }
     obj->set("ips", ips);
+
     std::string data = obj->dumps();
     std::string res;
     int status_code;
@@ -183,6 +184,14 @@ void SrsHttpHooks::on_unpublish(string url, SrsRequest* req)
     obj->set("stream", SrsJsonAny::str(req->stream.c_str()));
     obj->set("param", SrsJsonAny::str(req->param.c_str()));
     
+    SrsJsonArray* ips = SrsJsonAny::array();
+    vector<string> &local_ips = srs_get_local_ips();
+    for(int i = 0; i < local_ips.size(); i++){
+    	string &ip = local_ips[i];
+    	ips->add(SrsJsonAny::str(ip.c_str()));
+    }
+    obj->set("ips", ips);
+
     std::string data = obj->dumps();
     std::string res;
     int status_code;
