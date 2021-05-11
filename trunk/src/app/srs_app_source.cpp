@@ -1826,11 +1826,12 @@ srs_error_t SrsSourceManager::notify(int event, srs_utime_t interval, srs_utime_
 #if 1
         // When source expired, remove it.
         if (source->expired()) {
-            int cid = source->source_id();
-            if (cid == -1 && source->pre_source_id() > 0) {
+            SrsContextId tmp;
+            SrsContextId cid = source->source_id();
+            if (!cid.compare(tmp.set_value("-1")) && source->pre_source_id().compare(tmp.set_value("0")) > 0) {
                 cid = source->pre_source_id();
             }
-            if (cid > 0) {
+            if (cid.compare(tmp.set_value("0")) > 0) {
                 _srs_context->set_id(cid);
             }
             srs_trace("cleanup die source, total=%d", (int)pool.size());

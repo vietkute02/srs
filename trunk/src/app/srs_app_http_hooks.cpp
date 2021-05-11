@@ -144,11 +144,11 @@ srs_error_t SrsHttpHooks::on_publish(string url, SrsRequest* req)
     obj->set("param", SrsJsonAny::str(req->param.c_str()));
 
     SrsJsonArray *ips = SrsJsonAny::array();
-    vector<string> &local_ips = srs_get_local_ips();
+    vector<SrsIPAddress*> &local_ips = srs_get_local_ips();
     for (int i = 0; i < local_ips.size(); i++)
     {
-        string &ip = local_ips[i];
-        ips->add(SrsJsonAny::str(ip.c_str()));
+        SrsIPAddress* &ip = local_ips[i];
+        ips->add(SrsJsonAny::str(ip->ip.c_str()));
     }
     obj->set("ips", ips);
 
@@ -186,11 +186,11 @@ void SrsHttpHooks::on_unpublish(string url, SrsRequest* req)
     obj->set("param", SrsJsonAny::str(req->param.c_str()));
 
     SrsJsonArray *ips = SrsJsonAny::array();
-    vector<string> &local_ips = srs_get_local_ips();
+    vector<SrsIPAddress*> &local_ips = srs_get_local_ips();
     for (int i = 0; i < local_ips.size(); i++)
     {
-        string &ip = local_ips[i];
-        ips->add(SrsJsonAny::str(ip.c_str()));
+        SrsIPAddress* &ip = local_ips[i];
+        ips->add(SrsJsonAny::str(ip->ip.c_str()));
     }
     obj->set("ips", ips);
 

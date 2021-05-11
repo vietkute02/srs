@@ -153,7 +153,7 @@ private:
     int64_t _nb_msgs;
     // The video frames we got.
     uint64_t video_frames;
-    SrSIFrame iframe;
+    SrsIFrame iframe;
     // For mr(merged read),
     // @see https://github.com/ossrs/srs/issues/241
     bool mr;
