@@ -455,6 +455,7 @@ private:
     // update the request and return the exists source.
     virtual SrsLiveSource* fetch(SrsRequest* r);
 public:
+    bool has_source(SrsRequest* r);
     // dispose and cycle all sources.
     virtual void dispose();
 // interface ISrsHourGlass

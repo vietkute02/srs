@@ -309,8 +309,8 @@ string srs_get_public_internet_address(bool ipv4_only)
         }
 
         srs_warn("use public address as ip: %s, ifname=%s", ip->ip.c_str(), ip->ifname.c_str());
-        _public_internet_address = ip->ip;
-        return ip->ip;
+        // _public_internet_address = ip->ip;
+        // return ip->ip;
     }
     
     // no public address, use private address.

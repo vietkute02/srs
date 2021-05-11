@@ -1524,6 +1524,7 @@ SrsRequest::SrsRequest()
     duration = -1;
     port = SRS_CONSTS_RTMP_DEFAULT_PORT;
     args = NULL;
+    timeout = 0;
 }
 
 SrsRequest::~SrsRequest()

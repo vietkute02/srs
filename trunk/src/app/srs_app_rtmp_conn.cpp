@@ -507,7 +507,12 @@ srs_error_t SrsRtmpConn::stream_service_cycle()
     // client is identified, set the timeout to service timeout.
     rtmp->set_recv_timeout(SRS_CONSTS_RTMP_TIMEOUT);
     rtmp->set_send_timeout(SRS_CONSTS_RTMP_TIMEOUT);
-    
+
+    if (info->type == SrsRtmpConnPlay && !_srs_sources->has_source(req))
+    {
+        return srs_error_new(ERROR_RTMP_STREAM_NOT_FOUND, "rtmp: no source");
+    }
+
     // find a source to serve.
     SrsLiveSource* source = NULL;
     if ((err = _srs_sources->fetch_or_create(req, server, &source)) != srs_success) {
@@ -887,6 +892,7 @@ srs_error_t SrsRtmpConn::do_publishing(SrsLiveSource* source, SrsPublishRecvThre
     
     int64_t nb_msgs = 0;
     uint64_t nb_frames = 0;
+    SrsStatistic::instance()->set_fps_provider(req, rtrd, rtrd->get_iframes());
     while (true) {
         if ((err = trd->pull()) != srs_success) {
             return srs_error_wrap(err, "rtmp: thread quit");
@@ -935,6 +941,7 @@ srs_error_t SrsRtmpConn::do_publishing(SrsLiveSource* source, SrsPublishRecvThre
         }
     }
     
+    SrsStatistic::instance()->set_fps_provider(req, NULL, NULL);
     return err;
 }
 
@@ -1334,8 +1341,12 @@ srs_error_t SrsRtmpConn::http_hooks_on_publish()
     
     for (int i = 0; i < (int)hooks.size(); i++) {
         std::string url = hooks.at(i);
-        if ((err = SrsHttpHooks::on_publish(url, req)) != srs_success) {
-            return srs_error_wrap(err, "rtmp on_publish %s", url.c_str());
+        // if ((err = SrsHttpHooks::on_publish(url, req)) != srs_success) {
+        //     return srs_error_wrap(err, "rtmp on_publish %s", url.c_str());
+        // }
+        if ((err = SrsHttpHooks::on_publish(url, req)) == srs_success)
+        {
+            break;
         }
     }
     

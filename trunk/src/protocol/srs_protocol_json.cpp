@@ -1380,16 +1380,20 @@ public:
     
     SrsJsonString(const char* v)
     {
-        marker = SRS_JSON_String;
         if (v) {
-            value = v;
+            std::string json_str = v;
+            json_str = srs_string_replace(json_str, "\"", "\\\"");
+            marker = SRS_JSON_String;
+            value = json_str;
         }
     }
     SrsJsonString(const char* v, int s)
     {
         marker = SRS_JSON_String;
         if (v) {
-            value.append(v, s);
+            std::string json_str = v;
+            srs_string_replace(json_str, "\"", "\\\"");
+            value.append(json_str.c_str(), s);
         }
     }
     virtual ~SrsJsonString()

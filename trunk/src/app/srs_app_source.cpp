@@ -1625,11 +1625,11 @@ srs_error_t SrsMetaCache::update_data(SrsMessageHeader* header, SrsOnMetaDataPac
     srs_trace("got metadata%s", ss.str().c_str());
     
     // add server info to metadata
-    metadata->metadata->set("server", SrsAmf0Any::str(RTMP_SIG_SRS_SERVER));
+    // metadata->metadata->set("server", SrsAmf0Any::str(RTMP_SIG_SRS_SERVER));
 
     // version, for example, 1.0.0
     // add version to metadata, please donot remove it, for debug.
-    metadata->metadata->set("server_version", SrsAmf0Any::str(RTMP_SIG_SRS_VERSION));
+    // metadata->metadata->set("server_version", SrsAmf0Any::str(RTMP_SIG_SRS_VERSION));
     
     // encode the metadata to payload
     int size = 0;
@@ -1708,6 +1708,12 @@ srs_error_t SrsLiveSourceManager::fetch_or_create(SrsRequest* r, ISrsLiveSourceH
     }
     
     string stream_url = r->get_stream_url();
+    if (stream_url.find('\"') != string::npos)
+    {
+        srs_warn("Incoming stream url %s has quotes. Failed to initialize stream source",
+                 r->get_stream_url().c_str());
+        return srs_error_new(ERROR_ST_INITIALIZE, "fetch_or_create SrsSource");
+    }
     string vhost = r->vhost;
     
     // should always not exists for create a source.
@@ -1749,9 +1755,23 @@ SrsLiveSource* SrsLiveSourceManager::fetch(SrsRequest* r)
     return source;
 }
 
-void SrsLiveSourceManager::dispose()
+bool SrsSourceManager::has_source(SrsRequest *r)
 {
-    std::map<std::string, SrsLiveSource*>::iterator it;
+    if (!lock)
+        lock = srs_mutex_new();
+    SrsLocker(lock);
+    string stream_url = r->get_stream_url();
+    if (pool.find(stream_url) == pool.end() || pool[stream_url]->inactive())
+        return false;
+    return true;
+}
+
+void SrsSourceManager::dispose()
+{
+    if (!lock)
+        lock = srs_mutex_new();
+    SrsLocker(lock);
+    std::map<std::string, SrsSource*>::iterator it;
     for (it = pool.begin(); it != pool.end(); ++it) {
         SrsLiveSource* source = it->second;
         source->dispose();
@@ -1777,8 +1797,15 @@ srs_error_t SrsLiveSourceManager::setup_ticks()
 srs_error_t SrsLiveSourceManager::notify(int event, srs_utime_t interval, srs_utime_t tick)
 {
     srs_error_t err = srs_success;
+<<<<<<< HEAD
 
     std::map<std::string, SrsLiveSource*>::iterator it;
+=======
+    if (!lock)
+        lock = srs_mutex_new();
+    SrsLocker(lock);
+    std::map<std::string, SrsSource*>::iterator it;
+>>>>>>> b3426fd0 (sigma merge 3.0release to 4.0release)
     for (it = pool.begin(); it != pool.end();) {
         SrsLiveSource* source = it->second;
 
@@ -1790,7 +1817,7 @@ srs_error_t SrsLiveSourceManager::notify(int event, srs_utime_t interval, srs_ut
         // TODO: FIXME: support source cleanup.
         // @see https://github.com/ossrs/srs/issues/713
         // @see https://github.com/ossrs/srs/issues/714
-#if 0
+#if 1
         // When source expired, remove it.
         if (source->expired()) {
             int cid = source->source_id();
@@ -1817,7 +1844,14 @@ srs_error_t SrsLiveSourceManager::notify(int event, srs_utime_t interval, srs_ut
 
 void SrsLiveSourceManager::destroy()
 {
+<<<<<<< HEAD
     std::map<std::string, SrsLiveSource*>::iterator it;
+=======
+    if (!lock)
+        lock = srs_mutex_new();
+    SrsLocker(lock);
+    std::map<std::string, SrsSource*>::iterator it;
+>>>>>>> b3426fd0 (sigma merge 3.0release to 4.0release)
     for (it = pool.begin(); it != pool.end(); ++it) {
         SrsLiveSource* source = it->second;
         srs_freep(source);
@@ -1857,6 +1891,7 @@ SrsLiveSource::SrsLiveSource()
     
     _srs_config->subscribe(this);
     atc = false;
+    handler = NULL;
 }
 
 SrsLiveSource::~SrsLiveSource()
@@ -2082,6 +2117,8 @@ bool SrsLiveSource::inactive()
 void SrsLiveSource::update_auth(SrsRequest* r)
 {
     req->update_auth(r);
+    //reset stream state
+    die_at = 0;
 }
 
 bool SrsLiveSource::can_publish(bool is_edge)

@@ -194,6 +194,7 @@ SrsHlsMuxer::SrsHlsMuxer()
     
     memset(key, 0, 16);
     memset(iv, 0, 16);
+    writer = NULL;
 }
 
 SrsHlsMuxer::~SrsHlsMuxer()
