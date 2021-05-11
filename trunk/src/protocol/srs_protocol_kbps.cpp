@@ -49,7 +49,7 @@ void SrsKbpsSlice::sample()
 
     if (now - sample_5s.time >= 5 * SRS_UTIME_SECONDS)
     {
-        int kbps = (int)((total_bytes - sample_5s.bytes) * 8 / srsu2ms(now - sample_5s.time));
+        int kbps = (int)((total_bytes - sample_5s.total) * 8 / srsu2ms(now - sample_5s.time));
         sample_5s.update(total_bytes, now, kbps);
     }
 
@@ -151,12 +151,12 @@ int SrsKbps::get_recv_kbps()
 
 int SrsKbps::get_send_kbps_5s()
 {
-    return os.sample_5s.kbps;
+    return os.sample_5s.rate;
 }
 
 int SrsKbps::get_recv_kbps_5s()
 {
-    return is.sample_5s.kbps;
+    return is.sample_5s.rate;
 }
 
 int SrsKbps::get_send_kbps_30s()
