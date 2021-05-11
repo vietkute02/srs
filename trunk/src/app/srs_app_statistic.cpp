@@ -87,6 +87,9 @@ srs_error_t SrsStatisticVhost::dumps(SrsJsonObject* obj)
     
     okbps->set("recv_30s", SrsJsonAny::integer(kbps->get_recv_kbps_30s()));
     okbps->set("send_30s", SrsJsonAny::integer(kbps->get_send_kbps_30s()));
+    okbps->set("recv_5s", SrsJsonAny::integer(kbps->get_recv_kbps_5s()));
+    okbps->set("send_5s", SrsJsonAny::integer(kbps->get_send_kbps_5s()));
+
     
     SrsJsonObject* hls = SrsJsonAny::object();
     obj->set("hls", hls);
@@ -97,6 +100,62 @@ srs_error_t SrsStatisticVhost::dumps(SrsJsonObject* obj)
     }
     
     return err;
+}
+
+SrsIFrame::SrsIFrame()
+{
+    index = 0;
+    memset(pts, 0, sizeof(uint64_t) * IFRAME_COUNT);
+}
+
+void SrsIFrame::add(uint64_t pts)
+{
+    this->pts[index] = pts;
+    index++;
+    if (index == IFRAME_COUNT)
+        index = 0;
+}
+
+SrsFrameProvider::SrsFrameProvider() {}
+
+SrsFrameProvider::~SrsFrameProvider() {}
+
+SrsFps::SrsFps(int delayArg)
+{
+    delay = delayArg * 1000000;
+    set(NULL);
+}
+
+int SrsFps::get()
+{
+    update();
+    return fps;
+}
+
+void SrsFps::set(SrsFrameProvider *p)
+{
+    provider = p;
+    fps = last_time = last_frames = 0;
+}
+
+void SrsFps::update()
+{
+    srs_utime_t now = srs_get_system_time();
+    if (!provider)
+        return;
+    int frames = provider->nb_video_frames();
+    if (!last_time)
+    {
+        last_time = now;
+        last_frames = frames;
+        return;
+    }
+    if (now - last_time >= delay)
+    {
+        fps = (int)((frames - last_frames) * 1000000LL / (now - last_time) + 0.5);
+        last_time = now;
+        last_frames = frames;
+    }
 }
 
 SrsStatisticStream::SrsStatisticStream()
@@ -124,12 +183,17 @@ SrsStatisticStream::SrsStatisticStream()
     
     nb_clients = 0;
     nb_frames = 0;
+    fps_5 = new SrsFps(5);
+    fps_30 = new SrsFps(30);
+    iframes = NULL;
 }
 
 SrsStatisticStream::~SrsStatisticStream()
 {
     srs_freep(kbps);
     srs_freep(clk);
+    srs_freep(fps_5);
+    srs_freep(fps_30);
 }
 
 srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
@@ -143,6 +207,23 @@ srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
     obj->set("live_ms", SrsJsonAny::integer(srsu2ms(srs_get_system_time())));
     obj->set("clients", SrsJsonAny::integer(nb_clients));
     obj->set("frames", SrsJsonAny::integer(nb_frames));
+    SrsJsonObject *fps = SrsJsonAny::object();
+    obj->set("fps", fps);
+    fps->set("recv_5s", SrsJsonAny::integer(fps_5->get()));
+    fps->set("recv_30s", SrsJsonAny::integer(fps_30->get()));
+    if (iframes != NULL)
+    {
+        SrsJsonArray *ifrs = SrsJsonAny::array();
+        for (int i = 0; i < IFRAME_COUNT; i++)
+        {
+            int index = (iframes->index - i - 1 + IFRAME_COUNT) % IFRAME_COUNT;
+            if (!iframes->pts[index])
+                break;
+            ifrs->add(SrsJsonAny::integer(iframes->pts[index]));
+        }
+        obj->set("pts", SrsJsonAny::integer(iframes->now));
+        obj->set("iframe", ifrs);
+    }
     obj->set("send_bytes", SrsJsonAny::integer(kbps->get_send_bytes()));
     obj->set("recv_bytes", SrsJsonAny::integer(kbps->get_recv_bytes()));
     
@@ -151,6 +232,8 @@ srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
     
     okbps->set("recv_30s", SrsJsonAny::integer(kbps->get_recv_kbps_30s()));
     okbps->set("send_30s", SrsJsonAny::integer(kbps->get_send_kbps_30s()));
+    okbps->set("recv_5s", SrsJsonAny::integer(kbps->get_recv_kbps_5s()));
+    okbps->set("send_5s", SrsJsonAny::integer(kbps->get_send_kbps_5s()));
     
     SrsJsonObject* publish = SrsJsonAny::object();
     obj->set("publish", publish);
@@ -402,8 +485,19 @@ srs_error_t SrsStatistic::on_video_frames(SrsRequest* req, int nb_frames)
     SrsStatisticStream* stream = create_stream(vhost, req);
     
     stream->nb_frames += nb_frames;
-    
+    stream->fps_5->update();
+    stream->fps_30->update();
+
     return err;
+}
+
+void SrsStatistic::set_fps_provider(SrsRequest *req, SrsFrameProvider *provider, SrsIFrame *iframes)
+{
+    SrsStatisticVhost *vhost = create_vhost(req);
+    SrsStatisticStream *stream = create_stream(vhost, req);
+    stream->fps_5->set(provider);
+    stream->fps_30->set(provider);
+    stream->iframes = iframes;
 }
 
 void SrsStatistic::on_stream_publish(SrsRequest* req, SrsContextId cid)

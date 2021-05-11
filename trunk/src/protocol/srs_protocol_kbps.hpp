@@ -64,6 +64,7 @@ public:
     // cache for io maybe freed.
     int64_t last_bytes;
     // samples
+    SrsRateSample sample_5s;
     SrsRateSample sample_30s;
     SrsRateSample sample_1m;
     SrsRateSample sample_5m;
@@ -166,6 +167,9 @@ public:
      */
     virtual int get_send_kbps();
     virtual int get_recv_kbps();
+    // 5s
+    virtual int get_send_kbps_5s();
+    virtual int get_recv_kbps_5s();
     // 30s
     virtual int get_send_kbps_30s();
     virtual int get_recv_kbps_30s();

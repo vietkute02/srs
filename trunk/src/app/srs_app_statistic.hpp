@@ -59,6 +59,40 @@ public:
     virtual srs_error_t dumps(SrsJsonObject* obj);
 };
 
+class SrsFrameProvider
+{
+public:
+    SrsFrameProvider();
+    virtual ~SrsFrameProvider();
+    virtual uint64_t nb_video_frames() = 0;
+};
+
+#define IFRAME_COUNT 8
+class SrsIFrame
+{
+public:
+    uint64_t pts[IFRAME_COUNT];
+    int index;
+    uint64_t now;
+    SrsIFrame();
+    void add(uint64_t pts);
+};
+
+struct SrsFps
+{
+private:
+    int fps;
+    int delay;
+    uint64_t last_time, last_frames;
+    SrsFrameProvider *provider;
+
+public:
+    SrsFps(int delay);
+    int get();
+    void set(SrsFrameProvider *provider);
+    void update();
+};
+
 struct SrsStatisticStream
 {
 public:
@@ -75,6 +109,8 @@ public:
     // The stream total kbps.
     SrsKbps* kbps;
     SrsWallClock* clk;
+    SrsFps *fps_30, *fps_5;
+    SrsIFrame *iframes;
 public:
     bool has_video;
     SrsVideoCodecId vcodec;
@@ -194,6 +230,7 @@ public:
     // When got videos, update the frames.
     // We only stat the total number of video frames.
     virtual srs_error_t on_video_frames(SrsRequest* req, int nb_frames);
+    void set_fps_provider(SrsRequest *req, SrsFrameProvider *provider, SrsIFrame *iframes);
     // When publish stream.
     // @param req the request object of publish connection.
     // @param cid the cid of publish connection.
