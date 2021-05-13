@@ -44,6 +44,7 @@ using namespace std;
 #include <srs_app_threads.hpp>
 #include <srs_service_log.hpp>
 #include <srs_app_log.hpp>
+#include <srs_app_http_hooks.hpp>
 
 #include <srs_protocol_kbps.hpp>
 
@@ -386,6 +387,8 @@ SrsRtcPlayStream::~SrsRtcPlayStream()
 
     _srs_config->unsubscribe(this);
 
+    stop();
+
     srs_freep(nack_epp);
     srs_freep(pli_worker_);
     srs_freep(trd_);
@@ -517,6 +520,10 @@ srs_error_t SrsRtcPlayStream::start()
         return err;
     }
 
+    if ((err = http_hooks_on_play()) != srs_success) {
+        return srs_error_wrap(err, "RTC: http_hooks_on_play");
+    }
+
     srs_freep(trd_);
     trd_ = new SrsFastCoroutine("rtc_sender", this, cid_);
 
@@ -547,6 +554,8 @@ srs_error_t SrsRtcPlayStream::start()
 
 void SrsRtcPlayStream::stop()
 {
+    http_hooks_on_stop();
+
     if (trd_) {
         trd_->stop();
     }
@@ -866,6 +875,16 @@ srs_error_t SrsRtcPlayStream::do_request_keyframe(uint32_t ssrc, SrsContextId ci
     return err;
 }
 
+srs_error_t SrsRtcPlayStream::http_hooks_on_play()
+{
+    return SrsHttpHooksController::http_hooks_on_play(req_);
+}
+
+void SrsRtcPlayStream::http_hooks_on_stop()
+{
+    return SrsHttpHooksController::http_hooks_on_stop(req_);
+}
+
 SrsRtcPublishRtcpTimer::SrsRtcPublishRtcpTimer(SrsRtcPublishStream* p) : p_(p)
 {
     _srs_hybrid->timer1s()->subscribe(this);
@@ -975,6 +994,8 @@ SrsRtcPublishStream::SrsRtcPublishStream(SrsRtcConnection* session, const SrsCon
 
 SrsRtcPublishStream::~SrsRtcPublishStream()
 {
+    http_hooks_on_unpublish();
+
     srs_freep(timer_rtcp_);
     srs_freep(timer_twcc_);
 
@@ -1111,6 +1132,10 @@ srs_error_t SrsRtcPublishStream::start()
 
     if (is_started) {
         return err;
+    }
+
+    if ((err = http_hooks_on_publish()) != srs_success) {
+        return srs_error_wrap(err, "RTC: http_hooks_on_publish");
     }
 
     if ((err = source->on_publish()) != srs_success) {
@@ -1637,6 +1662,16 @@ void SrsRtcPublishStream::update_send_report_time(uint32_t ssrc, const SrsNtp& n
     if (audio_track) {
         return audio_track->update_send_report_time(ntp);
     }
+}
+
+srs_error_t SrsRtcPublishStream::http_hooks_on_publish()
+{
+    return SrsHttpHooksController::http_hooks_on_publish(req);
+}
+
+void SrsRtcPublishStream::http_hooks_on_unpublish()
+{
+    return SrsHttpHooksController::http_hooks_on_unpublish(req);
 }
 
 ISrsRtcConnectionHijacker::ISrsRtcConnectionHijacker()
