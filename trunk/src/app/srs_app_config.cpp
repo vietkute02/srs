@@ -1,25 +1,8 @@
-/**
- * The MIT License (MIT)
- *
- * Copyright (c) 2013-2021 Winlin
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+//
+// Copyright (c) 2013-2021 Winlin
+//
+// SPDX-License-Identifier: MIT
+//
 
 #include <srs_app_config.hpp>
 
@@ -279,11 +262,6 @@ bool srs_stream_caster_is_flv(string caster)
     return caster == "flv";
 }
 
-bool srs_stream_caster_is_gb28181(string caster)
-{
-    return caster == "gb28181";
-}
-
 bool srs_config_apply_filter(SrsConfDirective* dvr_apply, SrsRequest* req)
 {
     static bool DEFAULT = true;
@@ -325,6 +303,23 @@ srs_error_t srs_config_transform_vhost(SrsConfDirective* root)
         if (dir->name == "http_stream") {
             dir->name = "http_server";
             continue;
+        }
+
+        // SRS4.0, removed the support of configs:
+        //      rtc_server { perf_stat; queue_length; }
+        if (dir->name == "rtc_server") {
+            std::vector<SrsConfDirective*>::iterator it;
+            for (it = dir->directives.begin(); it != dir->directives.end();) {
+                SrsConfDirective* conf = *it;
+
+                if (conf->name == "perf_stat" || conf->name == "queue_length") {
+                    dir->directives.erase(it);
+                    srs_freep(conf);
+                    continue;
+                }
+
+                ++it;
+            }
         }
         
         if (!dir->is_vhost()) {
@@ -3176,6 +3171,8 @@ srs_error_t SrsConfig::raw_disable_vhost(string vhost, bool& applied)
     applied = false;
     
     SrsConfDirective* conf = root->get("vhost", vhost);
+    srs_assert(conf);
+
     conf->get_or_create("enabled")->set_arg0("off");
     
     if ((err = do_reload_vhost_removed(vhost)) != srs_success) {
@@ -3194,6 +3191,8 @@ srs_error_t SrsConfig::raw_enable_vhost(string vhost, bool& applied)
     applied = false;
     
     SrsConfDirective* conf = root->get("vhost", vhost);
+    srs_assert(conf);
+
     conf->get_or_create("enabled")->set_arg0("on");
     
     if ((err = do_reload_vhost_added(vhost)) != srs_success) {
@@ -3212,6 +3211,8 @@ srs_error_t SrsConfig::raw_enable_dvr(string vhost, string stream, bool& applied
     applied = false;
     
     SrsConfDirective* conf = root->get("vhost", vhost);
+    srs_assert(conf);
+
     conf = conf->get_or_create("dvr")->get_or_create("dvr_apply");
     
     if (conf->args.size() == 1 && (conf->arg0() == "all" || conf->arg0() == "none")) {
@@ -3238,6 +3239,8 @@ srs_error_t SrsConfig::raw_disable_dvr(string vhost, string stream, bool& applie
     applied = false;
     
     SrsConfDirective* conf = root->get("vhost", vhost);
+    srs_assert(conf);
+
     conf = conf->get_or_create("dvr")->get_or_create("dvr_apply");
     
     std::vector<string>::iterator it;
@@ -3576,6 +3579,12 @@ srs_error_t SrsConfig::check_config()
     if ((err = check_number_connections()) != srs_success) {
         return srs_error_wrap(err, "check connections");
     }
+
+    // If use the full.conf, fail.
+    if (is_full_config()) {
+        return srs_error_new(ERROR_SYSTEM_CONFIG_INVALID,
+            "never use full.conf(%s)", config_file.c_str());
+    }
     
     return err;
 }
@@ -3608,7 +3617,8 @@ srs_error_t SrsConfig::check_normal_config()
             && n != "ff_log_level" && n != "grace_final_wait" && n != "force_grace_quit"
             && n != "grace_start_wait" && n != "empty_ip_ok" && n != "disable_daemon_for_docker"
             && n != "inotify_auto_reload" && n != "auto_reload_for_docker" && n != "tcmalloc_release_rate"
-            && n != "circuit_breaker"
+            && n != "query_latest_version"
+            && n != "circuit_breaker" && n != "is_full"
             ) {
             return srs_error_new(ERROR_SYSTEM_CONFIG_INVALID, "illegal directive %s", n.c_str());
         }
@@ -3678,8 +3688,8 @@ srs_error_t SrsConfig::check_normal_config()
         for (int i = 0; conf && i < (int)conf->directives.size(); i++) {
             string n = conf->at(i)->name;
             if (n != "enabled" && n != "listen" && n != "dir" && n != "candidate" && n != "ecdsa"
-                && n != "encrypt" && n != "reuseport" && n != "merge_nalus" && n != "perf_stat" && n != "black_hole"
-                && n != "ip_family" && n != "rtp_cache" && n != "rtp_msg_cache") {
+                && n != "encrypt" && n != "reuseport" && n != "merge_nalus" && n != "black_hole"
+                && n != "ip_family") {
                 return srs_error_new(ERROR_SYSTEM_CONFIG_INVALID, "illegal rtc_server.%s", n.c_str());
             }
         }
@@ -4129,6 +4139,18 @@ bool SrsConfig::get_daemon()
     return SRS_CONF_PERFER_TRUE(conf->arg0());
 }
 
+bool SrsConfig::is_full_config()
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = root->get("is_full");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return SRS_CONF_PERFER_FALSE(conf->arg0());
+}
+
 SrsConfDirective* SrsConfig::get_root()
 {
     return root;
@@ -4220,6 +4242,18 @@ bool SrsConfig::get_asprocess()
     }
     
     return SRS_CONF_PERFER_FALSE(conf->arg0());
+}
+
+bool SrsConfig::whether_query_latest_version()
+{
+    static bool DEFAULT = true;
+
+    SrsConfDirective* conf = root->get("query_latest_version");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return SRS_CONF_PERFER_TRUE(conf->arg0());
 }
 
 bool SrsConfig::empty_ip_ok()
@@ -4572,302 +4606,6 @@ int SrsConfig::get_stream_caster_rtp_port_max(SrsConfDirective* conf)
     return ::atoi(conf->arg0().c_str());
 }
 
-srs_utime_t SrsConfig::get_stream_caster_gb28181_rtp_idle_timeout(SrsConfDirective* conf)
-{
-    static srs_utime_t DEFAULT = 30 * SRS_UTIME_SECONDS;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("rtp_idle_timeout");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return (srs_utime_t)(::atoi(conf->arg0().c_str()) * SRS_UTIME_SECONDS);
-}
-
-srs_utime_t SrsConfig::get_stream_caster_gb28181_ack_timeout(SrsConfDirective* conf)
-{
-    static srs_utime_t DEFAULT = 30 * SRS_UTIME_SECONDS;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("sip");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("ack_timeout");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return  (srs_utime_t)(::atoi(conf->arg0().c_str()) * SRS_UTIME_SECONDS);
-}
-
-srs_utime_t SrsConfig::get_stream_caster_gb28181_keepalive_timeout(SrsConfDirective* conf)
-{
-    static srs_utime_t DEFAULT = 120 * SRS_UTIME_SECONDS;
-
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("sip");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("keepalive_timeout");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return (srs_utime_t)(::atoi(conf->arg0().c_str()) * SRS_UTIME_SECONDS);
-}
-
-string SrsConfig::get_stream_caster_gb28181_host(SrsConfDirective* conf)
-{
-    static string DEFAULT = "*";
-
-    conf = conf->get("host");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    string eip = srs_getenv(conf->arg0());
-    if (!eip.empty()) {
-        return eip;
-    }
-
-    // If configed as ENV, but no ENV set, use default value.
-    if (srs_string_starts_with(conf->arg0(), "$")) {
-        return DEFAULT;
-    }
-
-    return conf->arg0();
-}
-
-string SrsConfig::get_stream_caster_gb28181_serial(SrsConfDirective* conf)
-{
-    static string DEFAULT = "34020000002000000001";
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("sip");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("serial");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return conf->arg0();
-}
-
-string SrsConfig::get_stream_caster_gb28181_realm(SrsConfDirective* conf)
-{
-    static string DEFAULT = "3402000000";
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("sip");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("realm");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return conf->arg0();
-}
-
-bool SrsConfig::get_stream_caster_gb28181_audio_enable(SrsConfDirective* conf)
-{
-    static bool DEFAULT = false;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("audio_enable");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_FALSE(conf->arg0());
-}
-
-bool SrsConfig::get_stream_caster_gb28181_jitterbuffer_enable(SrsConfDirective* conf)
-{
-    static bool DEFAULT = true;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("jitterbuffer_enable");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_FALSE(conf->arg0());
-}
-
-bool SrsConfig::get_stream_caster_gb28181_wait_keyframe(SrsConfDirective* conf)
-{
-    static bool DEFAULT = true;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("wait_keyframe");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_FALSE(conf->arg0());
-}
-
-bool SrsConfig::get_stream_caster_gb28181_sip_enable(SrsConfDirective* conf)
-{
-    static bool DEFAULT = true;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("sip");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("enabled");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_FALSE(conf->arg0());
-}
-
-bool SrsConfig::get_stream_caster_gb28181_sip_auto_play(SrsConfDirective* conf)
-{
-    static bool DEFAULT = true;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("sip");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("auto_play");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_FALSE(conf->arg0());
-
-}
-
-int SrsConfig::get_stream_caster_gb28181_sip_listen(SrsConfDirective* conf)
-{
-    static int DEFAULT = 5060;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("sip");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("listen");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return ::atoi(conf->arg0().c_str());
-
-}
-
-bool SrsConfig::get_stream_caster_gb28181_sip_invite_port_fixed(SrsConfDirective* conf)
-{
-    static bool DEFAULT = true;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("sip");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("invite_port_fixed");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_FALSE(conf->arg0());
-
-}
-
-bool SrsConfig::get_stream_caster_gb28181_auto_create_channel(SrsConfDirective* conf)
-{
-    static bool DEFAULT = false;
-
-    if (!conf) {
-        return DEFAULT;
-    }
-   
-    conf = conf->get("auto_create_channel");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_FALSE(conf->arg0());
-}
-
-srs_utime_t SrsConfig::get_stream_caster_gb28181_sip_query_catalog_interval(SrsConfDirective* conf)
-{
-    static srs_utime_t DEFAULT = 60 * SRS_UTIME_SECONDS;
-
-
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("sip");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("query_catalog_interval");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return (srs_utime_t)(::atoi(conf->arg0().c_str()) * SRS_UTIME_SECONDS);
-}
-
 bool SrsConfig::get_rtc_server_enabled()
 {
     SrsConfDirective* conf = root->get("rtc_server");
@@ -5031,155 +4769,6 @@ bool SrsConfig::get_rtc_server_merge_nalus()
     }
 
     return SRS_CONF_PERFER_TRUE(conf->arg0());
-}
-
-bool SrsConfig::get_rtc_server_perf_stat()
-{
-    static bool DEFAULT = false;
-
-    SrsConfDirective* conf = root->get("rtc_server");
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("perf_stat");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_FALSE(conf->arg0());
-}
-
-SrsConfDirective* SrsConfig::get_rtc_server_rtp_cache()
-{
-    SrsConfDirective* conf = root->get("rtc_server");
-    if (!conf) {
-        return NULL;
-    }
-
-    conf = conf->get("rtp_cache");
-    if (!conf) {
-        return NULL;
-    }
-
-    return conf;
-}
-
-bool SrsConfig::get_rtc_server_rtp_cache_enabled()
-{
-    static bool DEFAULT = true;
-
-    SrsConfDirective* conf = get_rtc_server_rtp_cache();
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("enabled");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_TRUE(conf->arg0());
-}
-
-uint64_t SrsConfig::get_rtc_server_rtp_cache_pkt_size()
-{
-    int DEFAULT = 64 * 1024 * 1024;
-
-    SrsConfDirective* conf = get_rtc_server_rtp_cache();
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("pkt_size");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return 1024 * (uint64_t)(1024 * ::atof(conf->arg0().c_str()));
-}
-
-uint64_t SrsConfig::get_rtc_server_rtp_cache_payload_size()
-{
-    int DEFAULT = 16 * 1024 * 1024;
-
-    SrsConfDirective* conf = get_rtc_server_rtp_cache();
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("payload_size");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return 1024 * (uint64_t)(1024 * ::atof(conf->arg0().c_str()));
-}
-
-SrsConfDirective* SrsConfig::get_rtc_server_rtp_msg_cache()
-{
-    SrsConfDirective* conf = root->get("rtc_server");
-    if (!conf) {
-        return NULL;
-    }
-
-    conf = conf->get("rtp_msg_cache");
-    if (!conf) {
-        return NULL;
-    }
-
-    return conf;
-}
-
-bool SrsConfig::get_rtc_server_rtp_msg_cache_enabled()
-{
-    static bool DEFAULT = true;
-
-    SrsConfDirective* conf = get_rtc_server_rtp_msg_cache();
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("enabled");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return SRS_CONF_PERFER_TRUE(conf->arg0());
-}
-
-uint64_t SrsConfig::get_rtc_server_rtp_msg_cache_msg_size()
-{
-    int DEFAULT = 16 * 1024 * 1024;
-
-    SrsConfDirective* conf = get_rtc_server_rtp_msg_cache();
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("msg_size");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return 1024 * (uint64_t)(1024 * ::atof(conf->arg0().c_str()));
-}
-
-uint64_t SrsConfig::get_rtc_server_rtp_msg_cache_buffer_size()
-{
-    int DEFAULT = 512 * 1024 * 1024;
-
-    SrsConfDirective* conf = get_rtc_server_rtp_msg_cache();
-    if (!conf) {
-        return DEFAULT;
-    }
-
-    conf = conf->get("buffer_size");
-    if (!conf || conf->arg0().empty()) {
-        return DEFAULT;
-    }
-
-    return 1024 * (uint64_t)(1024 * ::atof(conf->arg0().c_str()));
 }
 
 bool SrsConfig::get_rtc_server_black_hole()
@@ -6084,20 +5673,26 @@ int SrsConfig::get_global_chunk_size()
     return ::atoi(conf->arg0().c_str());
 }
 
-bool SrsConfig::get_forward_enabled(string vhost)
-{
+bool SrsConfig::get_forward_enabled(string vhost) {
     static bool DEFAULT = false;
-    
+
     SrsConfDirective* conf = get_vhost(vhost);
     if (!conf) {
         return DEFAULT;
     }
-    
-    conf = conf->get("forward");
+
+    return get_forward_enabled(conf);
+}
+
+bool SrsConfig::get_forward_enabled(SrsConfDirective* vhost)
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = vhost->get("forward");
     if (!conf) {
         return DEFAULT;
     }
-    
+
     conf = conf->get("enabled");
     if (!conf || conf->arg0().empty()) {
         return DEFAULT;
@@ -6135,7 +5730,19 @@ bool SrsConfig::get_vhost_http_hooks_enabled(string vhost)
 {
     static bool DEFAULT = false;
     
-    SrsConfDirective* conf = get_vhost_http_hooks(vhost);
+    SrsConfDirective* conf = get_vhost(vhost);
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return get_vhost_http_hooks_enabled(conf);
+}
+
+bool SrsConfig::get_vhost_http_hooks_enabled(SrsConfDirective* vhost)
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = vhost->get("http_hooks");
     if (!conf) {
         return DEFAULT;
     }
@@ -6465,13 +6072,20 @@ bool SrsConfig::get_security_enabled(string vhost)
     if (!conf) {
         return DEFAULT;
     }
+
+    return get_security_enabled(conf);
+}
+
+bool SrsConfig::get_security_enabled(SrsConfDirective* vhost)
+{
+    static bool DEFAULT = false;
     
-    SrsConfDirective* security = conf->get("security");
-    if (!security) {
+    SrsConfDirective* conf = vhost->get("security");
+    if (!conf) {
         return DEFAULT;
     }
     
-    conf = security->get("enabled");
+    conf = conf->get("enabled");
     if (!conf || conf->arg0().empty()) {
         return DEFAULT;
     }
@@ -6946,7 +6560,19 @@ bool SrsConfig::get_exec_enabled(string vhost)
 {
     static bool DEFAULT = false;
     
-    SrsConfDirective* conf = get_exec(vhost);
+    SrsConfDirective* conf = get_vhost(vhost);
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return get_exec_enabled(conf);
+}
+
+bool SrsConfig::get_exec_enabled(SrsConfDirective* vhost)
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = vhost->get("exec");
     if (!conf) {
         return DEFAULT;
     }
@@ -7157,8 +6783,20 @@ SrsConfDirective* SrsConfig::get_dash(string vhost)
 bool SrsConfig::get_dash_enabled(string vhost)
 {
     static bool DEFAULT = false;
+
+    SrsConfDirective* conf = get_vhost(vhost);
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return get_dash_enabled(conf);
+}
+
+bool SrsConfig::get_dash_enabled(SrsConfDirective* vhost)
+{
+    static bool DEFAULT = false;
     
-    SrsConfDirective* conf = get_dash(vhost);
+    SrsConfDirective* conf = vhost->get("dash");
     if (!conf) {
         return DEFAULT;
     }
@@ -7265,8 +6903,20 @@ SrsConfDirective* SrsConfig::get_hls(string vhost)
 bool SrsConfig::get_hls_enabled(string vhost)
 {
     static bool DEFAULT = false;
-    
-    SrsConfDirective* conf = get_hls(vhost);
+
+    SrsConfDirective* conf = get_vhost(vhost);
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return get_hls_enabled(conf);
+}
+
+bool SrsConfig::get_hls_enabled(SrsConfDirective* vhost)
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = vhost->get("hls");
     
     if (!conf) {
         return DEFAULT;
@@ -7672,7 +7322,19 @@ bool SrsConfig::get_hds_enabled(const string &vhost)
 {
     static bool DEFAULT = false;
     
-    SrsConfDirective* conf = get_hds(vhost);
+    SrsConfDirective* conf = get_vhost(vhost);
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return get_hds_enabled(conf);
+}
+
+bool SrsConfig::get_hds_enabled(SrsConfDirective* vhost)
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = vhost->get("hds");
     if (!conf) {
         return DEFAULT;
     }
@@ -7749,8 +7411,20 @@ SrsConfDirective* SrsConfig::get_dvr(string vhost)
 bool SrsConfig::get_dvr_enabled(string vhost)
 {
     static bool DEFAULT = false;
-    
-    SrsConfDirective* conf = get_dvr(vhost);
+
+    SrsConfDirective* conf = get_vhost(vhost);
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return get_dvr_enabled(conf);
+}
+
+bool SrsConfig::get_dvr_enabled(SrsConfDirective* vhost)
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = vhost->get("dvr");
     if (!conf) {
         return DEFAULT;
     }
@@ -8528,7 +8202,14 @@ bool SrsConfig::get_vhost_http_remux_enabled(string vhost)
         return DEFAULT;
     }
 
-    conf = conf->get("http_remux");
+    return get_vhost_http_remux_enabled(conf);
+}
+
+bool SrsConfig::get_vhost_http_remux_enabled(SrsConfDirective* vhost)
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = vhost->get("http_remux");
     if (!conf) {
         return DEFAULT;
     }

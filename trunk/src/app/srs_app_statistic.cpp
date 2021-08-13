@@ -1,25 +1,8 @@
-/**
- * The MIT License (MIT)
- *
- * Copyright (c) 2013-2021 Winlin
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+//
+// Copyright (c) 2013-2021 Winlin
+//
+// SPDX-License-Identifier: MIT
+//
 
 #include <srs_app_statistic.hpp>
 
@@ -34,23 +17,16 @@ using namespace std;
 #include <srs_app_config.hpp>
 #include <srs_kernel_utility.hpp>
 #include <srs_protocol_amf0.hpp>
+#include <srs_protocol_utility.hpp>
 
-string srs_generate_id()
+string srs_generate_stat_vid()
 {
-    static int64_t srs_gvid = 0;
-
-    if (srs_gvid == 0) {
-        srs_gvid = getpid();
-    }
-
-    string prefix = "vid";
-    string rand_id = srs_int2str(srs_get_system_time() % 1000);
-    return prefix + "-" + srs_int2str(srs_gvid++) + "-" + rand_id;
+    return "vid-" + srs_random_str(7);
 }
 
 SrsStatisticVhost::SrsStatisticVhost()
 {
-    id = srs_generate_id();
+    id = srs_generate_stat_vid();
     
     clk = new SrsWallClock();
     kbps = new SrsKbps(clk);
@@ -87,9 +63,6 @@ srs_error_t SrsStatisticVhost::dumps(SrsJsonObject* obj)
     
     okbps->set("recv_30s", SrsJsonAny::integer(kbps->get_recv_kbps_30s()));
     okbps->set("send_30s", SrsJsonAny::integer(kbps->get_send_kbps_30s()));
-    okbps->set("recv_5s", SrsJsonAny::integer(kbps->get_recv_kbps_5s()));
-    okbps->set("send_5s", SrsJsonAny::integer(kbps->get_send_kbps_5s()));
-
     
     SrsJsonObject* hls = SrsJsonAny::object();
     obj->set("hls", hls);
@@ -102,65 +75,9 @@ srs_error_t SrsStatisticVhost::dumps(SrsJsonObject* obj)
     return err;
 }
 
-SrsIFrame::SrsIFrame()
-{
-    index = 0;
-    memset(pts, 0, sizeof(uint64_t) * IFRAME_COUNT);
-}
-
-void SrsIFrame::add(uint64_t pts)
-{
-    this->pts[index] = pts;
-    index++;
-    if (index == IFRAME_COUNT)
-        index = 0;
-}
-
-SrsFrameProvider::SrsFrameProvider() {}
-
-SrsFrameProvider::~SrsFrameProvider() {}
-
-SrsFps::SrsFps(int delayArg)
-{
-    delay = delayArg * 1000000;
-    set(NULL);
-}
-
-int SrsFps::get()
-{
-    update();
-    return fps;
-}
-
-void SrsFps::set(SrsFrameProvider *p)
-{
-    provider = p;
-    fps = last_time = last_frames = 0;
-}
-
-void SrsFps::update()
-{
-    srs_utime_t now = srs_get_system_time();
-    if (!provider)
-        return;
-    int frames = provider->nb_video_frames();
-    if (!last_time)
-    {
-        last_time = now;
-        last_frames = frames;
-        return;
-    }
-    if (now - last_time >= delay)
-    {
-        fps = (int)((frames - last_frames) * 1000000LL / (now - last_time) + 0.5);
-        last_time = now;
-        last_frames = frames;
-    }
-}
-
 SrsStatisticStream::SrsStatisticStream()
 {
-    id = srs_generate_id();
+    id = srs_generate_stat_vid();
     vhost = NULL;
     active = false;
 
@@ -183,17 +100,12 @@ SrsStatisticStream::SrsStatisticStream()
     
     nb_clients = 0;
     nb_frames = 0;
-    fps_5 = new SrsFps(5);
-    fps_30 = new SrsFps(30);
-    iframes = NULL;
 }
 
 SrsStatisticStream::~SrsStatisticStream()
 {
     srs_freep(kbps);
     srs_freep(clk);
-    srs_freep(fps_5);
-    srs_freep(fps_30);
 }
 
 srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
@@ -207,23 +119,6 @@ srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
     obj->set("live_ms", SrsJsonAny::integer(srsu2ms(srs_get_system_time())));
     obj->set("clients", SrsJsonAny::integer(nb_clients));
     obj->set("frames", SrsJsonAny::integer(nb_frames));
-    SrsJsonObject *fps = SrsJsonAny::object();
-    obj->set("fps", fps);
-    fps->set("recv_5s", SrsJsonAny::integer(fps_5->get()));
-    fps->set("recv_30s", SrsJsonAny::integer(fps_30->get()));
-    if (iframes != NULL)
-    {
-        SrsJsonArray *ifrs = SrsJsonAny::array();
-        for (int i = 0; i < IFRAME_COUNT; i++)
-        {
-            int index = (iframes->index - i - 1 + IFRAME_COUNT) % IFRAME_COUNT;
-            if (!iframes->pts[index])
-                break;
-            ifrs->add(SrsJsonAny::integer(iframes->pts[index]));
-        }
-        obj->set("pts", SrsJsonAny::integer(iframes->now));
-        obj->set("iframe", ifrs);
-    }
     obj->set("send_bytes", SrsJsonAny::integer(kbps->get_send_bytes()));
     obj->set("recv_bytes", SrsJsonAny::integer(kbps->get_recv_bytes()));
     
@@ -232,14 +127,12 @@ srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
     
     okbps->set("recv_30s", SrsJsonAny::integer(kbps->get_recv_kbps_30s()));
     okbps->set("send_30s", SrsJsonAny::integer(kbps->get_send_kbps_30s()));
-    okbps->set("recv_5s", SrsJsonAny::integer(kbps->get_recv_kbps_5s()));
-    okbps->set("send_5s", SrsJsonAny::integer(kbps->get_send_kbps_5s()));
     
     SrsJsonObject* publish = SrsJsonAny::object();
     obj->set("publish", publish);
     
     publish->set("active", SrsJsonAny::boolean(active));
-    publish->set("cid", SrsJsonAny::str(connection_cid.c_str()));
+    publish->set("cid", SrsJsonAny::str(publisher_id.c_str()));
     
     if (!has_video) {
         obj->set("video", SrsJsonAny::null());
@@ -269,9 +162,9 @@ srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
     return err;
 }
 
-void SrsStatisticStream::publish(SrsContextId cid)
+void SrsStatisticStream::publish(std::string id)
 {
-    connection_cid = cid;
+    publisher_id = id;
     active = true;
     
     vhost->nb_streams++;
@@ -297,6 +190,7 @@ SrsStatisticClient::SrsStatisticClient()
 
 SrsStatisticClient::~SrsStatisticClient()
 {
+	srs_freep(req);
 }
 
 srs_error_t SrsStatisticClient::dumps(SrsJsonObject* obj)
@@ -318,42 +212,15 @@ srs_error_t SrsStatisticClient::dumps(SrsJsonObject* obj)
     return err;
 }
 
-SrsStatisticCategory::SrsStatisticCategory()
-{
-    nn = 0;
-
-    a = 0;
-    b = 0;
-    c = 0;
-    d = 0;
-    e = 0;
-
-    f = 0;
-    g = 0;
-    h = 0;
-    i = 0;
-    j = 0;
-}
-
-SrsStatisticCategory::~SrsStatisticCategory()
-{
-}
-
 SrsStatistic* SrsStatistic::_instance = NULL;
 
 SrsStatistic::SrsStatistic()
 {
-    _server_id = srs_generate_id();
+    _server_id = srs_generate_stat_vid();
     
     clk = new SrsWallClock();
     kbps = new SrsKbps(clk);
     kbps->set_io(NULL, NULL);
-
-    perf_iovs = new SrsStatisticCategory();
-    perf_msgs = new SrsStatisticCategory();
-    perf_rtp = new SrsStatisticCategory();
-    perf_rtc = new SrsStatisticCategory();
-    perf_bytes = new SrsStatisticCategory();
 }
 
 SrsStatistic::~SrsStatistic()
@@ -387,12 +254,6 @@ SrsStatistic::~SrsStatistic()
     rvhosts.clear();
     streams.clear();
     rstreams.clear();
-
-    srs_freep(perf_iovs);
-    srs_freep(perf_msgs);
-    srs_freep(perf_rtp);
-    srs_freep(perf_rtc);
-    srs_freep(perf_bytes);
 }
 
 SrsStatistic* SrsStatistic::instance()
@@ -485,27 +346,16 @@ srs_error_t SrsStatistic::on_video_frames(SrsRequest* req, int nb_frames)
     SrsStatisticStream* stream = create_stream(vhost, req);
     
     stream->nb_frames += nb_frames;
-    stream->fps_5->update();
-    stream->fps_30->update();
-
+    
     return err;
 }
 
-void SrsStatistic::set_fps_provider(SrsRequest *req, SrsFrameProvider *provider, SrsIFrame *iframes)
-{
-    SrsStatisticVhost *vhost = create_vhost(req);
-    SrsStatisticStream *stream = create_stream(vhost, req);
-    stream->fps_5->set(provider);
-    stream->fps_30->set(provider);
-    stream->iframes = iframes;
-}
-
-void SrsStatistic::on_stream_publish(SrsRequest* req, SrsContextId cid)
+void SrsStatistic::on_stream_publish(SrsRequest* req, std::string publisher_id)
 {
     SrsStatisticVhost* vhost = create_vhost(req);
     SrsStatisticStream* stream = create_stream(vhost, req);
     
-    stream->publish(cid);
+    stream->publish(publisher_id);
 }
 
 void SrsStatistic::on_stream_close(SrsRequest* req)
@@ -531,12 +381,9 @@ void SrsStatistic::on_stream_close(SrsRequest* req)
     }
 }
 
-srs_error_t SrsStatistic::on_client(SrsContextId cid, SrsRequest* req, ISrsExpire* conn, SrsRtmpConnType type)
+srs_error_t SrsStatistic::on_client(std::string id, SrsRequest* req, ISrsExpire* conn, SrsRtmpConnType type)
 {
     srs_error_t err = srs_success;
-
-    // TODO: FIXME: We should use UUID for client ID.
-    std::string id = cid.c_str();
 
     SrsStatisticVhost* vhost = create_vhost(req);
     SrsStatisticStream* stream = create_stream(vhost, req);
@@ -554,19 +401,20 @@ srs_error_t SrsStatistic::on_client(SrsContextId cid, SrsRequest* req, ISrsExpir
     
     // got client.
     client->conn = conn;
-    client->req = req;
     client->type = type;
     stream->nb_clients++;
     vhost->nb_clients++;
+
+    // The req might be freed, in such as SrsLiveStream::update, so we must copy it.
+    // @see https://github.com/ossrs/srs/issues/2311
+    srs_freep(client->req);
+    client->req = req->copy();
     
     return err;
 }
 
-void SrsStatistic::on_disconnect(const SrsContextId& cid)
+void SrsStatistic::on_disconnect(std::string id)
 {
-    // TODO: FIXME: We should use UUID for client ID.
-    std::string id = cid.c_str();
-
     std::map<std::string, SrsStatisticClient*>::iterator it;
     if ((it = clients.find(id)) == clients.end()) {
         return;
@@ -583,10 +431,8 @@ void SrsStatistic::on_disconnect(const SrsContextId& cid)
     vhost->nb_clients--;
 }
 
-void SrsStatistic::kbps_add_delta(const SrsContextId& cid, ISrsKbpsDelta* delta)
+void SrsStatistic::kbps_add_delta(std::string id, ISrsKbpsDelta* delta)
 {
-    // TODO: FIXME: Should not use context id as connection id.
-    std::string id = cid.c_str();
     if (clients.find(id) == clients.end()) {
         return;
     }
@@ -688,157 +534,6 @@ srs_error_t SrsStatistic::dumps_clients(SrsJsonArray* arr, int start, int count)
         }
     }
     
-    return err;
-}
-
-void SrsStatistic::perf_on_msgs(int nb_msgs)
-{
-    perf_on_packets(perf_msgs, nb_msgs);
-}
-
-srs_error_t SrsStatistic::dumps_perf_msgs(SrsJsonObject* obj)
-{
-    return dumps_perf(perf_msgs, obj);
-}
-
-void SrsStatistic::perf_on_rtc_packets(int nb_packets)
-{
-    perf_on_packets(perf_rtc, nb_packets);
-}
-
-srs_error_t SrsStatistic::dumps_perf_rtc_packets(SrsJsonObject* obj)
-{
-    return dumps_perf(perf_rtc, obj);
-}
-
-void SrsStatistic::perf_on_rtp_packets(int nb_packets)
-{
-    perf_on_packets(perf_rtp, nb_packets);
-}
-
-srs_error_t SrsStatistic::dumps_perf_rtp_packets(SrsJsonObject* obj)
-{
-    return dumps_perf(perf_rtp, obj);
-}
-
-void SrsStatistic::perf_on_writev_iovs(int nb_iovs)
-{
-    perf_on_packets(perf_iovs, nb_iovs);
-}
-
-srs_error_t SrsStatistic::dumps_perf_writev_iovs(SrsJsonObject* obj)
-{
-    return dumps_perf(perf_iovs, obj);
-}
-
-void SrsStatistic::perf_on_rtc_bytes(int nn_bytes, int nn_rtp_bytes, int nn_padding)
-{
-    // a: AVFrame bytes.
-    // b: RTC bytes.
-    // c: RTC paddings.
-    perf_bytes->a += nn_bytes;
-    perf_bytes->b += nn_rtp_bytes;
-    perf_bytes->c += nn_padding;
-
-    perf_bytes->nn += nn_rtp_bytes;
-}
-
-srs_error_t SrsStatistic::dumps_perf_bytes(SrsJsonObject* obj)
-{
-    obj->set("avframe_bytes", SrsJsonAny::integer(perf_bytes->a));
-    obj->set("rtc_bytes", SrsJsonAny::integer(perf_bytes->b));
-    obj->set("rtc_padding", SrsJsonAny::integer(perf_bytes->c));
-
-    obj->set("nn",  SrsJsonAny::integer(perf_bytes->nn));
-
-    return srs_success;
-}
-
-void SrsStatistic::reset_perf()
-{
-    srs_freep(perf_iovs);
-    srs_freep(perf_msgs);
-    srs_freep(perf_rtp);
-    srs_freep(perf_rtc);
-    srs_freep(perf_bytes);
-
-    perf_iovs = new SrsStatisticCategory();
-    perf_msgs = new SrsStatisticCategory();
-    perf_rtp = new SrsStatisticCategory();
-    perf_rtc = new SrsStatisticCategory();
-    perf_bytes = new SrsStatisticCategory();
-}
-
-void SrsStatistic::perf_on_packets(SrsStatisticCategory* p, int nb_msgs)
-{
-    // The range for stat:
-    //      2, 3, 5, 9, 16, 32, 64, 128, 256
-    // that is:
-    //      a: <2
-    //      b: <3
-    //      c: <5
-    //      d: <9
-    //      e: <16
-    //      f: <32
-    //      g: <64
-    //      h: <128
-    //      i: <256
-    //      j: >=256
-    if (nb_msgs < 2) {
-        p->a++;
-    } else if (nb_msgs < 3) {
-        p->b++;
-    } else if (nb_msgs < 5) {
-        p->c++;
-    } else if (nb_msgs < 9) {
-        p->d++;
-    } else if (nb_msgs < 16) {
-        p->e++;
-    } else if (nb_msgs < 32) {
-        p->f++;
-    } else if (nb_msgs < 64) {
-        p->g++;
-    } else if (nb_msgs < 128) {
-        p->h++;
-    } else if (nb_msgs < 256) {
-        p->i++;
-    } else {
-        p->j++;
-    }
-
-    p->nn += nb_msgs;
-}
-
-srs_error_t SrsStatistic::dumps_perf(SrsStatisticCategory* p, SrsJsonObject* obj)
-{
-    srs_error_t err = srs_success;
-
-    // The range for stat:
-    //      2, 3, 5, 9, 16, 32, 64, 128, 256
-    // that is:
-    //      a: <2
-    //      b: <3
-    //      c: <5
-    //      d: <9
-    //      e: <16
-    //      f: <32
-    //      g: <64
-    //      h: <128
-    //      i: <256
-    //      j: >=256
-    if (p->a) obj->set("lt_2",    SrsJsonAny::integer(p->a));
-    if (p->b) obj->set("lt_3",    SrsJsonAny::integer(p->b));
-    if (p->c) obj->set("lt_5",    SrsJsonAny::integer(p->c));
-    if (p->d) obj->set("lt_9",    SrsJsonAny::integer(p->d));
-    if (p->e) obj->set("lt_16",   SrsJsonAny::integer(p->e));
-    if (p->f) obj->set("lt_32",   SrsJsonAny::integer(p->f));
-    if (p->g) obj->set("lt_64",   SrsJsonAny::integer(p->g));
-    if (p->h) obj->set("lt_128",  SrsJsonAny::integer(p->h));
-    if (p->i) obj->set("lt_256",  SrsJsonAny::integer(p->i));
-    if (p->j) obj->set("gt_256",  SrsJsonAny::integer(p->j));
-
-    obj->set("nn",  SrsJsonAny::integer(p->nn));
-
     return err;
 }
 

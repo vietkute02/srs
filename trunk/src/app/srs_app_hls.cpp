@@ -1,25 +1,8 @@
-/**
- * The MIT License (MIT)
- *
- * Copyright (c) 2013-2021 Winlin
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+//
+// Copyright (c) 2013-2021 Winlin
+//
+// SPDX-License-Identifier: MIT
+//
 
 #include <srs_app_hls.hpp>
 
@@ -101,7 +84,35 @@ SrsDvrAsyncCallOnHls::~SrsDvrAsyncCallOnHls()
 
 srs_error_t SrsDvrAsyncCallOnHls::call()
 {
-    return SrsHttpHooksController::http_hooks_on_hls(cid, req, path, ts_url, m3u8, m3u8_url, seq_no, duration);
+    srs_error_t err = srs_success;
+    
+    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost)) {
+        return err;
+    }
+    
+    // the http hooks will cause context switch,
+    // so we must copy all hooks for the on_connect may freed.
+    // @see https://github.com/ossrs/srs/issues/475
+    vector<string> hooks;
+    
+    if (true) {
+        SrsConfDirective* conf = _srs_config->get_vhost_on_hls(req->vhost);
+        
+        if (!conf) {
+            return err;
+        }
+        
+        hooks = conf->args;
+    }
+    
+    for (int i = 0; i < (int)hooks.size(); i++) {
+        std::string url = hooks.at(i);
+        if ((err = SrsHttpHooks::on_hls(cid, url, req, path, ts_url, m3u8, m3u8_url, seq_no, duration)) != srs_success) {
+            return srs_error_wrap(err, "callback on_hls %s", url.c_str());
+        }
+    }
+    
+    return err;
 }
 
 string SrsDvrAsyncCallOnHls::to_string()
@@ -123,7 +134,36 @@ SrsDvrAsyncCallOnHlsNotify::~SrsDvrAsyncCallOnHlsNotify()
 
 srs_error_t SrsDvrAsyncCallOnHlsNotify::call()
 {
-    return SrsHttpHooksController::http_hooks_on_hls_notify(cid, req, ts_url);
+    srs_error_t err = srs_success;
+    
+    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost)) {
+        return err;
+    }
+    
+    // the http hooks will cause context switch,
+    // so we must copy all hooks for the on_connect may freed.
+    // @see https://github.com/ossrs/srs/issues/475
+    vector<string> hooks;
+    
+    if (true) {
+        SrsConfDirective* conf = _srs_config->get_vhost_on_hls_notify(req->vhost);
+        
+        if (!conf) {
+            return err;
+        }
+        
+        hooks = conf->args;
+    }
+    
+    int nb_notify = _srs_config->get_vhost_hls_nb_notify(req->vhost);
+    for (int i = 0; i < (int)hooks.size(); i++) {
+        std::string url = hooks.at(i);
+        if ((err = SrsHttpHooks::on_hls_notify(cid, url, req, ts_url, nb_notify)) != srs_success) {
+            return srs_error_wrap(err, "callback on_hls_notify %s", url.c_str());
+        }
+    }
+    
+    return err;
 }
 
 string SrsDvrAsyncCallOnHlsNotify::to_string()
@@ -154,7 +194,6 @@ SrsHlsMuxer::SrsHlsMuxer()
     
     memset(key, 0, 16);
     memset(iv, 0, 16);
-    writer = NULL;
 }
 
 SrsHlsMuxer::~SrsHlsMuxer()
@@ -884,16 +923,16 @@ srs_error_t SrsHlsController::on_unpublish()
 {
     srs_error_t err = srs_success;
 
-    if ((err = muxer->on_unpublish()) != srs_success) {
-        return srs_error_wrap(err, "muxer unpublish");
-    }
-    
     if ((err = muxer->flush_audio(tsmc)) != srs_success) {
         return srs_error_wrap(err, "hls: flush audio");
     }
     
     if ((err = muxer->segment_close()) != srs_success) {
         return srs_error_wrap(err, "hls: segment close");
+    }
+
+    if ((err = muxer->on_unpublish()) != srs_success) {
+        return srs_error_wrap(err, "muxer unpublish");
     }
     
     return err;

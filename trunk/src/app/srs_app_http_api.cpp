@@ -1,25 +1,8 @@
-/**
- * The MIT License (MIT)
- *
- * Copyright (c) 2013-2021 Winlin
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+//
+// Copyright (c) 2013-2021 Winlin
+//
+// SPDX-License-Identifier: MIT
+//
 
 #include <srs_app_http_api.hpp>
 
@@ -1223,7 +1206,12 @@ srs_error_t SrsGoApiRaw::serve_http(ISrsHttpResponseWriter* w, ISrsHttpMessage* 
             if (action != "enable" && action != "disable") {
                 return srs_api_response_code(w, r, ERROR_SYSTEM_CONFIG_RAW_NOT_ALLOWED);
             }
-            
+
+            // the vhost must exists.
+            if (!_srs_config->get_vhost(value, false)) {
+                return srs_api_response_code(w, r, ERROR_SYSTEM_CONFIG_RAW_PARAMS);
+            }
+
             if (!_srs_config->get_dvr_enabled(value)) {
                 return srs_api_response_code(w, r, ERROR_SYSTEM_CONFIG_RAW_NOT_ALLOWED);
             }
@@ -1303,95 +1291,6 @@ srs_error_t SrsGoApiClusters::serve_http(ISrsHttpResponseWriter* w, ISrsHttpMess
     return srs_api_response(w, r, obj->dumps());
 }
 
-SrsGoApiPerf::SrsGoApiPerf()
-{
-}
-
-SrsGoApiPerf::~SrsGoApiPerf()
-{
-}
-
-srs_error_t SrsGoApiPerf::serve_http(ISrsHttpResponseWriter* w, ISrsHttpMessage* r)
-{
-    srs_error_t err = srs_success;
-
-    SrsJsonObject* obj = SrsJsonAny::object();
-    SrsAutoFree(SrsJsonObject, obj);
-
-    obj->set("code", SrsJsonAny::integer(ERROR_SUCCESS));
-    SrsJsonObject* data = SrsJsonAny::object();
-    obj->set("data", data);
-
-    SrsStatistic* stat = SrsStatistic::instance();
-
-    string target = r->query_get("target");
-    string reset = r->query_get("reset");
-    srs_trace("query target=%s, reset=%s, rtc_stat_enabled=%d", target.c_str(), reset.c_str(),
-        _srs_config->get_rtc_server_perf_stat());
-
-    if (true) {
-        SrsJsonObject* p = SrsJsonAny::object();
-        data->set("query", p);
-
-        p->set("target", SrsJsonAny::str(target.c_str()));
-        p->set("reset", SrsJsonAny::str(reset.c_str()));
-        p->set("help", SrsJsonAny::str("?target=avframes|rtc|rtp|writev_iovs|bytes"));
-        p->set("help2", SrsJsonAny::str("?reset=all"));
-    }
-
-    if (!reset.empty()) {
-        stat->reset_perf();
-        return srs_api_response(w, r, obj->dumps());
-    }
-
-    if (target.empty() || target == "avframes") {
-        SrsJsonObject* p = SrsJsonAny::object();
-        data->set("avframes", p);
-        if ((err = stat->dumps_perf_msgs(p)) != srs_success) {
-            int code = srs_error_code(err); srs_error_reset(err);
-            return srs_api_response_code(w, r, code);
-        }
-    }
-
-    if (target.empty() || target == "rtc") {
-        SrsJsonObject* p = SrsJsonAny::object();
-        data->set("rtc", p);
-        if ((err = stat->dumps_perf_rtc_packets(p)) != srs_success) {
-            int code = srs_error_code(err); srs_error_reset(err);
-            return srs_api_response_code(w, r, code);
-        }
-    }
-
-    if (target.empty() || target == "rtp") {
-        SrsJsonObject* p = SrsJsonAny::object();
-        data->set("rtp", p);
-        if ((err = stat->dumps_perf_rtp_packets(p)) != srs_success) {
-            int code = srs_error_code(err); srs_error_reset(err);
-            return srs_api_response_code(w, r, code);
-        }
-    }
-
-    if (target.empty() || target == "writev_iovs") {
-        SrsJsonObject* p = SrsJsonAny::object();
-        data->set("writev_iovs", p);
-        if ((err = stat->dumps_perf_writev_iovs(p)) != srs_success) {
-            int code = srs_error_code(err); srs_error_reset(err);
-            return srs_api_response_code(w, r, code);
-        }
-    }
-
-    if (target.empty() || target == "bytes") {
-        SrsJsonObject* p = SrsJsonAny::object();
-        data->set("bytes", p);
-        if ((err = stat->dumps_perf_bytes(p)) != srs_success) {
-            int code = srs_error_code(err); srs_error_reset(err);
-            return srs_api_response_code(w, r, code);
-        }
-    }
-
-    return srs_api_response(w, r, obj->dumps());
-}
-
 SrsGoApiError::SrsGoApiError()
 {
 }
@@ -1404,200 +1303,6 @@ srs_error_t SrsGoApiError::serve_http(ISrsHttpResponseWriter* w, ISrsHttpMessage
 {
     return srs_api_response_code(w, r, 100);
 }
-
-#ifdef SRS_GB28181
-SrsGoApiGb28181::SrsGoApiGb28181()
-{
-}
-
-SrsGoApiGb28181::~SrsGoApiGb28181()
-{
-}
-
-srs_error_t SrsGoApiGb28181::serve_http(ISrsHttpResponseWriter* w, ISrsHttpMessage* r)
-{
-    srs_error_t err = srs_success;
-
-    if ((err = do_serve_http(w, r)) != srs_success) {
-        srs_warn("Server GB28181 err %s", srs_error_desc(err).c_str());
-        int code = srs_error_code(err); srs_error_reset(err);
-        return srs_api_response_code(w, r, code);
-    }
-
-    return err;
-}
-
-srs_error_t SrsGoApiGb28181::do_serve_http(ISrsHttpResponseWriter* w, ISrsHttpMessage* r)
-{
-    srs_error_t err = srs_success;
-
-    SrsJsonObject* obj = SrsJsonAny::object();
-    SrsAutoFree(SrsJsonObject, obj);
-    
-    obj->set("code", SrsJsonAny::integer(ERROR_SUCCESS));
-    SrsJsonObject* data = SrsJsonAny::object();
-    obj->set("data", data);
-    
-    string id = r->query_get("id");
-    string action = r->query_get("action");
-    string vhost = r->query_get("vhost");
-    string app = r->query_get("app");
-    string stream = r->query_get("stream");
-    //fixed, random
-    string port_mode = r->query_get("port_mode");
-   
-    if (!_srs_gb28181) {
-        return srs_error_new(ERROR_GB28181_SERVER_NOT_RUN, "no gb28181 engine");
-    }
-
-    if(action == "create_channel"){
-        if (id.empty()){
-            return srs_error_new(ERROR_GB28181_VALUE_EMPTY, "no id");
-        }
-
-        SrsGb28181StreamChannel channel;
-        channel.set_channel_id(id);
-        channel.set_app(app);
-        channel.set_stream(stream);
-        channel.set_port_mode(port_mode);
-
-        if ((err = _srs_gb28181->create_stream_channel(&channel)) != srs_success) {
-            return srs_error_wrap(err, "create stream channel");
-        }
-
-        data->set("query", SrsJsonAny::object()
-          ->set("id", SrsJsonAny::str(channel.get_channel_id().c_str()))
-          ->set("ip", SrsJsonAny::str(channel.get_ip().c_str()))
-          ->set("rtmp_port", SrsJsonAny::integer(channel.get_rtmp_port()))
-          ->set("app", SrsJsonAny::str(channel.get_app().c_str()))
-          ->set("stream", SrsJsonAny::str(channel.get_stream().c_str()))
-          ->set("rtp_port", SrsJsonAny::integer(channel.get_rtp_port()))
-          ->set("ssrc", SrsJsonAny::integer(channel.get_ssrc())));
-        return srs_api_response(w, r, obj->dumps());
-
-    } else if(action == "delete_channel"){
-        string chid = r->query_get("chid");
-        if (id.empty() || chid.empty()){
-            return srs_error_new(ERROR_GB28181_VALUE_EMPTY, "no id or chid");
-        }
-
-        if ((err = _srs_gb28181->delete_stream_channel(id, chid)) != srs_success) {
-            return srs_error_wrap(err, "delete stream channel");
-        }
-
-        return srs_api_response_code(w, r, 0);
-    } else if(action == "query_channel") {
-        SrsJsonArray* arr = SrsJsonAny::array();
-        data->set("channels", arr);
-
-        if ((err = _srs_gb28181->query_stream_channel(id, arr)) != srs_success) {
-            return srs_error_wrap(err, "query stream channel");
-        }
-
-        return srs_api_response(w, r, obj->dumps());
-    } else if(action == "sip_invite"){
-        string chid = r->query_get("chid");
-        if (id.empty() || chid.empty()){
-            return srs_error_new(ERROR_GB28181_VALUE_EMPTY, "no id or chid");
-        }
-
-        string ssrc = r->query_get("ssrc");
-        string rtp_port = r->query_get("rtp_port");
-        string ip = r->query_get("ip");
-
-        int _port = strtoul(rtp_port.c_str(), NULL, 10);
-        uint32_t _ssrc = (uint32_t)(strtoul(ssrc.c_str(), NULL, 10));
-
-        if ((err = _srs_gb28181->notify_sip_invite(id, ip, _port, _ssrc, chid)) != srs_success) {
-            return srs_error_wrap(err, "notify sip invite");
-        }
-
-        return srs_api_response_code(w, r, 0);
-    } else if(action == "sip_bye"){
-        string chid = r->query_get("chid");
-        if (id.empty() || chid.empty()){
-            return srs_error_new(ERROR_GB28181_VALUE_EMPTY, "no id or chid");
-        }
-
-        if ((err = _srs_gb28181->notify_sip_bye(id, chid)) != srs_success) {
-            return srs_error_wrap(err, "notify sip bye");
-        }
-
-        return srs_api_response_code(w, r, 0);
-    } else if(action == "sip_ptz"){
-        string chid = r->query_get("chid");
-        string ptzcmd = r->query_get("ptzcmd");
-        string speed = r->query_get("speed");
-        string priority = r->query_get("priority");
-        if (id.empty() || chid.empty() || ptzcmd.empty() || speed.empty()){
-            return srs_error_new(ERROR_GB28181_VALUE_EMPTY, "no id or chid or ptzcmd or speed");
-        }
-
-        uint8_t _speed = (uint8_t)(strtoul(speed.c_str(), NULL, 10));
-        int _priority = (int)(strtoul(priority.c_str(), NULL, 10));
-
-        if ((err = _srs_gb28181->notify_sip_ptz(id, chid, ptzcmd, _speed, _priority)) != srs_success) {
-            return srs_error_wrap(err, "notify sip ptz");
-        }
-
-        return srs_api_response_code(w, r, 0);
-    } else if(action == "sip_raw_data"){
-        if (id.empty()){
-            return srs_error_new(ERROR_GB28181_VALUE_EMPTY, "no id");
-        }
-
-        std::string body;
-        r->body_read_all(body);
-
-        if ((err = _srs_gb28181->notify_sip_raw_data(id, body)) != srs_success) {
-            return srs_error_wrap(err, "notify sip raw data");
-        }
-
-        return srs_api_response_code(w, r, 0);
-    } else if(action == "sip_unregister"){
-        if (id.empty()){
-            return srs_error_new(ERROR_GB28181_VALUE_EMPTY, "no id");
-        }
-
-        if ((err = _srs_gb28181->notify_sip_unregister(id)) != srs_success) {
-            return srs_error_wrap(err, "notify sip unregister");
-        }
-
-        return srs_api_response_code(w, r, 0);
-    } else if(action == "sip_query_catalog"){
-        if (id.empty()){
-            return srs_error_new(ERROR_GB28181_VALUE_EMPTY, "no id");
-        }
-
-        if ((err = _srs_gb28181->notify_sip_query_catalog(id)) != srs_success) {
-            return srs_error_wrap(err, "notify sip query catelog");
-        }
-
-        return srs_api_response_code(w, r, 0);
-    } else if(action == "sip_query_devicelist"){
-        SrsJsonArray* arr = SrsJsonAny::array();
-        data->set("PlatformID", SrsJsonAny::str(_srs_gb28181->get_gb28181_config_ptr()->sip_serial.c_str()));
-        data->set("DeviceList", arr);
-
-        if ((err = _srs_gb28181->query_device_list("", arr)) != srs_success) {
-            return srs_error_wrap(err, "query device list");
-        }
-
-        return srs_api_response(w, r, obj->dumps());
-    } else if(action == "sip_query_session"){
-        SrsJsonArray* arr = SrsJsonAny::array();
-        data->set("sessions", arr);
-
-        if ((err = _srs_gb28181->query_sip_session(id, arr)) != srs_success) {
-            return srs_error_wrap(err, "notify sip session");
-        }
-
-        return srs_api_response(w, r, obj->dumps());
-    } else {
-        return srs_error_new(ERROR_GB28181_ACTION_INVALID, "action %s", action.c_str());
-    }
-}
-#endif
 
 #ifdef SRS_GPERF
 #include <gperftools/malloc_extension.h>

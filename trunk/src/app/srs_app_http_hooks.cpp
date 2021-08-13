@@ -1,25 +1,8 @@
-/**
- * The MIT License (MIT)
- *
- * Copyright (c) 2013-2021 Winlin
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+//
+// Copyright (c) 2013-2021 Winlin
+//
+// SPDX-License-Identifier: MIT
+//
 
 #include <srs_app_http_hooks.hpp>
 
@@ -142,22 +125,13 @@ srs_error_t SrsHttpHooks::on_publish(string url, SrsRequest* req)
     obj->set("tcUrl", SrsJsonAny::str(req->tcUrl.c_str()));
     obj->set("stream", SrsJsonAny::str(req->stream.c_str()));
     obj->set("param", SrsJsonAny::str(req->param.c_str()));
-
-    SrsJsonArray *ips = SrsJsonAny::array();
-    vector<SrsIPAddress*> &local_ips = srs_get_local_ips();
-    for (int i = 0; i < local_ips.size(); i++)
-    {
-        SrsIPAddress* &ip = local_ips[i];
-        ips->add(SrsJsonAny::str(ip->ip.c_str()));
-    }
-    obj->set("ips", ips);
-
+    
     std::string data = obj->dumps();
     std::string res;
     int status_code;
     
     SrsHttpClient http;
-    if ((err = do_post(&http, url, data, status_code, res, req)) != srs_success) {
+    if ((err = do_post(&http, url, data, status_code, res)) != srs_success) {
         return srs_error_wrap(err, "http: on_publish failed, client_id=%s, url=%s, request=%s, response=%s, code=%d",
             cid.c_str(), url.c_str(), data.c_str(), res.c_str(), status_code);
     }
@@ -184,16 +158,7 @@ void SrsHttpHooks::on_unpublish(string url, SrsRequest* req)
     obj->set("app", SrsJsonAny::str(req->app.c_str()));
     obj->set("stream", SrsJsonAny::str(req->stream.c_str()));
     obj->set("param", SrsJsonAny::str(req->param.c_str()));
-
-    SrsJsonArray *ips = SrsJsonAny::array();
-    vector<SrsIPAddress*> &local_ips = srs_get_local_ips();
-    for (int i = 0; i < local_ips.size(); i++)
-    {
-        SrsIPAddress* &ip = local_ips[i];
-        ips->add(SrsJsonAny::str(ip->ip.c_str()));
-    }
-    obj->set("ips", ips);
-
+    
     std::string data = obj->dumps();
     std::string res;
     int status_code;
@@ -487,7 +452,7 @@ srs_error_t SrsHttpHooks::discover_co_workers(string url, string& host, int& por
     return err;
 }
 
-srs_error_t SrsHttpHooks::do_post(SrsHttpClient* hc, std::string url, std::string req, int& code, string& res, SrsRequest* ro)
+srs_error_t SrsHttpHooks::do_post(SrsHttpClient* hc, std::string url, std::string req, int& code, string& res)
 {
     srs_error_t err = srs_success;
     
@@ -548,331 +513,10 @@ srs_error_t SrsHttpHooks::do_post(SrsHttpClient* hc, std::string url, std::strin
     if ((res_code = res_info->ensure_property_integer("code")) == NULL) {
         return srs_error_new(ERROR_RESPONSE_CODE, "http: response object no code %s", res.c_str());
     }
-
-    SrsJsonAny *timeout = NULL;
-    if (ro != NULL && (timeout = res_info->ensure_property_integer("timeout")) != NULL)
-    {
-        ro->timeout = timeout->to_integer();
-    }
-
+    
     if ((res_code->to_integer()) != ERROR_SUCCESS) {
         return srs_error_new(ERROR_RESPONSE_CODE, "http: response object code %" PRId64 " %s", res_code->to_integer(), res.c_str());
     }
     
-    return err;
-}
-
-SrsHttpHooksController::SrsHttpHooksController()
-{
-}
-
-SrsHttpHooksController::~SrsHttpHooksController()
-{
-}
-
-srs_error_t SrsHttpHooksController::http_hooks_on_connect(SrsRequest * req)
-{
-    srs_error_t err = srs_success;
-
-    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost)) {
-        return err;
-    }
-
-    // the http hooks will cause context switch,
-    // so we must copy all hooks for the on_connect may freed.
-    // @see https://github.com/ossrs/srs/issues/475
-    vector<string> hooks;
-
-    if (true) {
-        SrsConfDirective* conf = _srs_config->get_vhost_on_connect(req->vhost);
-
-        if (!conf) {
-            return err;
-        }
-
-        hooks = conf->args;
-    }
-
-    for (int i = 0; i < (int)hooks.size(); i++) {
-        std::string url = hooks.at(i);
-        if ((err = SrsHttpHooks::on_connect(url, req)) != srs_success) {
-            return srs_error_wrap(err, "on_connect %s", url.c_str());
-        }
-    }
-
-    return err;
-}
-
-void SrsHttpHooksController::http_hooks_on_close(SrsRequest* req, int64_t send_bytes, int64_t recv_bytes)
-{
-    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost)) {
-        return;
-    }
-
-    // the http hooks will cause context switch,
-    // so we must copy all hooks for the on_connect may freed.
-    // @see https://github.com/ossrs/srs/issues/475
-    vector<string> hooks;
-
-    if (true) {
-        SrsConfDirective* conf = _srs_config->get_vhost_on_close(req->vhost);
-
-        if (!conf) {
-            return;
-        }
-
-        hooks = conf->args;
-    }
-
-    for (int i = 0; i < (int)hooks.size(); i++) {
-        std::string url = hooks.at(i);
-        SrsHttpHooks::on_close(url, req, send_bytes, recv_bytes);
-    }
-}
-
-srs_error_t SrsHttpHooksController::http_hooks_on_publish(SrsRequest * req)
-{
-    srs_error_t err = srs_success;
-
-    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost)) {
-        return err;
-    }
-
-    // the http hooks will cause context switch,
-    // so we must copy all hooks for the on_connect may freed.
-    // @see https://github.com/ossrs/srs/issues/475
-    vector<string> hooks;
-
-    if (true) {
-        SrsConfDirective* conf = _srs_config->get_vhost_on_publish(req->vhost);
-
-        if (!conf) {
-            return err;
-        }
-
-        hooks = conf->args;
-    }
-
-    for (int i = 0; i < (int)hooks.size(); i++) {
-        std::string url = hooks.at(i);
-        if ((err = SrsHttpHooks::on_publish(url, req)) != srs_success) {
-            return srs_error_wrap(err, "rtmp on_publish %s", url.c_str());
-        }
-    }
-
-    return err;
-}
-
-void SrsHttpHooksController::http_hooks_on_unpublish(SrsRequest* req)
-{
-    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost))
-    {
-        return;
-    }
-
-    // the http hooks will cause context switch,
-    // so we must copy all hooks for the on_connect may freed.
-    // @see https://github.com/ossrs/srs/issues/475
-    vector<string> hooks;
-
-    if (true)
-    {
-        SrsConfDirective* conf = _srs_config->get_vhost_on_unpublish(req->vhost);
-
-        if (!conf)
-        {
-            return;
-        }
-
-        hooks = conf->args;
-    }
-
-    for (int i = 0; i < (int)hooks.size(); i++)
-    {
-        std::string url = hooks.at(i);
-        SrsHttpHooks::on_unpublish(url, req);
-    }
-}
-
-srs_error_t SrsHttpHooksController::http_hooks_on_play(SrsRequest* req)
-{
-    srs_error_t err = srs_success;
-
-    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost))
-    {
-        return err;
-    }
-
-    // the http hooks will cause context switch,
-    // so we must copy all hooks for the on_connect may freed.
-    // @see https://github.com/ossrs/srs/issues/475
-    vector<string> hooks;
-
-    if (true)
-    {
-        SrsConfDirective* conf = _srs_config->get_vhost_on_play(req->vhost);
-
-        if (!conf)
-        {
-            return err;
-        }
-
-        hooks = conf->args;
-    }
-
-    for (int i = 0; i < (int)hooks.size(); i++)
-    {
-        std::string url = hooks.at(i);
-        if ((err = SrsHttpHooks::on_play(url, req)) != srs_success)
-        {
-            return srs_error_wrap(err, "on_play %s", url.c_str());
-        }
-    }
-
-    return err;
-}
-
-void SrsHttpHooksController::http_hooks_on_stop(SrsRequest* req)
-{
-    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost))
-    {
-        return;
-    }
-
-    // the http hooks will cause context switch,
-    // so we must copy all hooks for the on_connect may freed.
-    // @see https://github.com/ossrs/srs/issues/475
-    vector<string> hooks;
-
-    if (true)
-    {
-        SrsConfDirective* conf = _srs_config->get_vhost_on_stop(req->vhost);
-
-        if (!conf)
-        {
-            return;
-        }
-
-        hooks = conf->args;
-    }
-
-    for (int i = 0; i < (int)hooks.size(); i++)
-    {
-        std::string url = hooks.at(i);
-        SrsHttpHooks::on_stop(url, req);
-    }
-
-    return;
-}
-
-srs_error_t SrsHttpHooksController::http_hooks_on_dvr(SrsContextId cid, SrsRequest* req, std::string file)
-{
-    srs_error_t err = srs_success;
-
-    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost))
-    {
-        return err;
-    }
-
-    // the http hooks will cause context switch,
-    // so we must copy all hooks for the on_connect may freed.
-    // @see https://github.com/ossrs/srs/issues/475
-    vector<string> hooks;
-
-    if (true)
-    {
-        SrsConfDirective* conf = _srs_config->get_vhost_on_dvr(req->vhost);
-        if (conf)
-        {
-            hooks = conf->args;
-        }
-    }
-
-    for (int i = 0; i < (int)hooks.size(); i++)
-    {
-        std::string url = hooks.at(i);
-        if ((err = SrsHttpHooks::on_dvr(cid, url, req, file)) != srs_success)
-        {
-            return srs_error_wrap(err, "callback on_dvr %s", url.c_str());
-        }
-    }
-
-    return err;
-}
-
-srs_error_t SrsHttpHooksController::http_hooks_on_hls(SrsContextId cid, SrsRequest* req, std::string file, std::string ts_url, std::string m3u8, std::string m3u8_url, int sn, srs_utime_t duration)
-{
-    srs_error_t err = srs_success;
-
-    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost))
-    {
-        return err;
-    }
-
-    // the http hooks will cause context switch,
-    // so we must copy all hooks for the on_connect may freed.
-    // @see https://github.com/ossrs/srs/issues/475
-    vector<string> hooks;
-
-    if (true)
-    {
-        SrsConfDirective* conf = _srs_config->get_vhost_on_hls(req->vhost);
-
-        if (!conf)
-        {
-            return err;
-        }
-
-        hooks = conf->args;
-    }
-
-    for (int i = 0; i < (int)hooks.size(); i++)
-    {
-        std::string url = hooks.at(i);
-        if ((err = SrsHttpHooks::on_hls(cid, url, req, file, ts_url, m3u8, m3u8_url, sn, duration)) != srs_success)
-        {
-            return srs_error_wrap(err, "callback on_hls %s", url.c_str());
-        }
-    }
-
-    return err;
-}
-
-srs_error_t SrsHttpHooksController::http_hooks_on_hls_notify(SrsContextId cid, SrsRequest* req, std::string ts_url)
-{
-    srs_error_t err = srs_success;
-
-    if (!_srs_config->get_vhost_http_hooks_enabled(req->vhost))
-    {
-        return err;
-    }
-
-    // the http hooks will cause context switch,
-    // so we must copy all hooks for the on_connect may freed.
-    // @see https://github.com/ossrs/srs/issues/475
-    vector<string> hooks;
-
-    if (true)
-    {
-        SrsConfDirective* conf = _srs_config->get_vhost_on_hls_notify(req->vhost);
-
-        if (!conf)
-        {
-            return err;
-        }
-
-        hooks = conf->args;
-    }
-
-    int nb_notify = _srs_config->get_vhost_hls_nb_notify(req->vhost);
-    for (int i = 0; i < (int)hooks.size(); i++)
-    {
-        std::string url = hooks.at(i);
-        if ((err = SrsHttpHooks::on_hls_notify(cid, url, req, ts_url, nb_notify)) != srs_success)
-        {
-            return srs_error_wrap(err, "callback on_hls_notify %s", url.c_str());
-        }
-    }
-
     return err;
 }

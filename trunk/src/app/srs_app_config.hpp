@@ -1,25 +1,8 @@
-/**
- * The MIT License (MIT)
- *
- * Copyright (c) 2013-2021 Winlin
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+//
+// Copyright (c) 2013-2021 Winlin
+//
+// SPDX-License-Identifier: MIT
+//
 
 #ifndef SRS_APP_CONFIG_HPP
 #define SRS_APP_CONFIG_HPP
@@ -119,7 +102,6 @@ extern bool srs_config_dvr_is_plan_session(std::string plan);
 extern bool srs_stream_caster_is_udp(std::string caster);
 extern bool srs_stream_caster_is_rtsp(std::string caster);
 extern bool srs_stream_caster_is_flv(std::string caster);
-extern bool srs_stream_caster_is_gb28181(std::string caster);
 // Whether the dvr_apply active the stream specified by req.
 extern bool srs_config_apply_filter(SrsConfDirective* dvr_apply, SrsRequest* req);
 
@@ -442,6 +424,10 @@ public:
     // If  true, SRS will run in daemon mode, fork and fork to reap the
     // grand-child process to init process.
     virtual bool get_daemon();
+private:
+    // Whether user use full.conf
+    virtual bool is_full_config();
+public:
     // Get the max connections limit of system.
     // If  exceed the max connection, SRS will disconnect the connection.
     // @remark, linux will limit the connections of each process,
@@ -471,6 +457,8 @@ public:
     virtual std::string get_work_dir();
     // Whether use asprocess mode.
     virtual bool get_asprocess();
+    // Whether query the latest available version of SRS.
+    virtual bool whether_query_latest_version();
     // Whether empty client IP is ok.
     virtual bool empty_ip_ok();
     // Get the start wait in ms for gracefully quit.
@@ -515,22 +503,6 @@ public:
     // Get the max udp port for rtp of stream caster rtsp.
     virtual int get_stream_caster_rtp_port_max(SrsConfDirective* conf);
 
-    virtual srs_utime_t get_stream_caster_gb28181_rtp_idle_timeout(SrsConfDirective* conf);
-    virtual srs_utime_t get_stream_caster_gb28181_ack_timeout(SrsConfDirective* conf);
-    virtual srs_utime_t get_stream_caster_gb28181_keepalive_timeout(SrsConfDirective* conf);
-    virtual bool get_stream_caster_gb28181_audio_enable(SrsConfDirective* conf);
-    virtual bool get_stream_caster_gb28181_jitterbuffer_enable(SrsConfDirective* conf);
-    virtual std::string get_stream_caster_gb28181_host(SrsConfDirective* conf);
-    virtual std::string get_stream_caster_gb28181_serial(SrsConfDirective* conf);
-    virtual std::string get_stream_caster_gb28181_realm(SrsConfDirective* conf);
-    virtual bool get_stream_caster_gb28181_wait_keyframe(SrsConfDirective* conf);
-    virtual bool get_stream_caster_gb28181_sip_enable(SrsConfDirective* conf);
-    virtual bool get_stream_caster_gb28181_sip_auto_play(SrsConfDirective* conf);
-    virtual int get_stream_caster_gb28181_sip_listen(SrsConfDirective* conf);
-    virtual bool get_stream_caster_gb28181_sip_invite_port_fixed(SrsConfDirective* conf);
-    virtual bool get_stream_caster_gb28181_auto_create_channel(SrsConfDirective* conf);
-    virtual srs_utime_t get_stream_caster_gb28181_sip_query_catalog_interval(SrsConfDirective* conf);
-
 // rtc section
 public:
     virtual bool get_rtc_server_enabled();
@@ -542,19 +514,6 @@ public:
     virtual bool get_rtc_server_encrypt();
     virtual int get_rtc_server_reuseport();
     virtual bool get_rtc_server_merge_nalus();
-    virtual bool get_rtc_server_perf_stat();
-private:
-    SrsConfDirective* get_rtc_server_rtp_cache();
-public:
-    virtual bool get_rtc_server_rtp_cache_enabled();
-    virtual uint64_t get_rtc_server_rtp_cache_pkt_size();
-    virtual uint64_t get_rtc_server_rtp_cache_payload_size();
-private:
-    virtual SrsConfDirective* get_rtc_server_rtp_msg_cache();
-public:
-    virtual bool get_rtc_server_rtp_msg_cache_enabled();
-    virtual uint64_t get_rtc_server_rtp_msg_cache_msg_size();
-    virtual uint64_t get_rtc_server_rtp_msg_cache_buffer_size();
 public:
     virtual bool get_rtc_server_black_hole();
     virtual std::string get_rtc_server_black_hole_addr();
@@ -684,6 +643,7 @@ private:
 public:
     // Whether the forwarder enabled.
     virtual bool get_forward_enabled(std::string vhost);
+    virtual bool get_forward_enabled(SrsConfDirective* vhost);
     // Get the forward directive of vhost.
     virtual SrsConfDirective* get_forwards(std::string vhost);
 
@@ -727,6 +687,7 @@ public:
     // Whether vhost http-hooks enabled.
     // @remark, if not enabled, donot callback all http hooks.
     virtual bool get_vhost_http_hooks_enabled(std::string vhost);
+    virtual bool get_vhost_http_hooks_enabled(SrsConfDirective* vhost);
     // Get the on_connect callbacks of vhost.
     // @return the on_connect callback directive, the args is the url to callback.
     virtual SrsConfDirective* get_vhost_on_connect(std::string vhost);
@@ -802,6 +763,7 @@ public:
 public:
     // Whether the secrity of vhost enabled.
     virtual bool get_security_enabled(std::string vhost);
+    virtual bool get_security_enabled(SrsConfDirective* vhost);
     // Get the security rules.
     virtual SrsConfDirective* get_security_rules(std::string vhost);
 // vhost transcode section
@@ -884,6 +846,7 @@ private:
 public:
     // Whether the exec is enabled of vhost.
     virtual bool get_exec_enabled(std::string vhost);
+    virtual bool get_exec_enabled(SrsConfDirective* vhost);
     // Get all exec publish directives of vhost.
     virtual std::vector<SrsConfDirective*> get_exec_publishs(std::string vhost);
     // vhost ingest section
@@ -921,6 +884,7 @@ private:
 public:
     // Whether DASH is enabled.
     virtual bool get_dash_enabled(std::string vhost);
+    virtual bool get_dash_enabled(SrsConfDirective* vhost);
     // Get the duration of segment in srs_utime_t.
     virtual srs_utime_t get_dash_fragment(std::string vhost);
     // Get the period to update MPD in srs_utime_t.
@@ -938,6 +902,7 @@ private:
 public:
     // Whether HLS is enabled.
     virtual bool get_hls_enabled(std::string vhost);
+    virtual bool get_hls_enabled(SrsConfDirective* vhost);
     // Get the HLS m3u8 list ts segment entry prefix info.
     virtual std::string get_hls_entry_prefix(std::string vhost);
     // Get the HLS ts/m3u8 file store path.
@@ -995,6 +960,7 @@ private:
 public:
     // Whether HDS is enabled.
     virtual bool get_hds_enabled(const std::string &vhost);
+    virtual bool get_hds_enabled(SrsConfDirective* vhost);
     // Get the HDS file store path.
     virtual std::string get_hds_path(const std::string &vhost);
     // Get the hds fragment time, in srs_utime_t.
@@ -1009,6 +975,7 @@ private:
 public:
     // Whether dvr is enabled.
     virtual bool get_dvr_enabled(std::string vhost);
+    virtual bool get_dvr_enabled(SrsConfDirective* vhost);
     // Get the filter of dvr to apply to.
     // @remark user can use srs_config_apply_filter(conf, req):bool to check it.
     virtual SrsConfDirective* get_dvr_apply(std::string vhost);
@@ -1084,6 +1051,7 @@ public:
 public:
     // Get whether vhost enabled http flv live stream
     virtual bool get_vhost_http_remux_enabled(std::string vhost);
+    virtual bool get_vhost_http_remux_enabled(SrsConfDirective* vhost);
     // Get the fast cache duration for http audio live stream.
     virtual srs_utime_t get_vhost_http_remux_fast_cache(std::string vhost);
     // Get the http flv live stream mount point for vhost.

@@ -1,25 +1,8 @@
-/**
- * The MIT License (MIT)
- *
- * Copyright (c) 2013-2021 Winlin
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+//
+// Copyright (c) 2013-2021 Winlin
+//
+// SPDX-License-Identifier: MIT
+//
 
 #include <srs_core.hpp>
 
@@ -98,9 +81,6 @@ srs_error_t do_main(int argc, char** argv)
 
     // TODO: support both little and big endian.
     srs_assert(srs_is_little_endian());
-
-    // For RTC to generating random ICE username.
-    ::srandom((unsigned long)(srs_update_system_time() | (::getpid()<<13)));
     
     // for gperf gmp or gcp,
     // should never enable it when not enabled for performance issue.
@@ -109,14 +89,6 @@ srs_error_t do_main(int argc, char** argv)
 #endif
 #ifdef SRS_GPERF_CP
     ProfilerStart("gperf.srs.gcp");
-#endif
-    
-    // directly compile error when these two macro defines.
-#if defined(SRS_GPERF_MC) && defined(SRS_GPERF_MP)
-#error ("option --with-gmc confict with --with-gmp, "
-    "@see: http://google-perftools.googlecode.com/svn/trunk/doc/heap_checker.html\n"
-    "Note that since the heap-checker uses the heap-profiling framework internally, "
-    "it is not possible to run both the heap-checker and heap profiler at the same time");
 #endif
     
     // never use gmp to check memory leak.
