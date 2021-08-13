@@ -444,7 +444,7 @@ void SrsStatistic::set_fps_provider(SrsRequest *req, SrsFrameProvider *provider,
     stream->iframes = iframes;
 }
 
-void SrsStatistic::on_stream_publish(SrsRequest* req, SrsContextId cid)
+void SrsStatistic::on_stream_publish(SrsRequest* req, std::string publisher_id)
 {
     SrsStatisticVhost* vhost = create_vhost(req);
     SrsStatisticStream* stream = create_stream(vhost, req);

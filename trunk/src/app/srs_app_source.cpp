@@ -1755,7 +1755,7 @@ SrsLiveSource* SrsLiveSourceManager::fetch(SrsRequest* r)
     return source;
 }
 
-bool SrsSourceManager::has_source(SrsRequest *r)
+bool SrsLiveSourceManager::has_source(SrsRequest *r)
 {
     if (!lock)
         lock = srs_mutex_new();
@@ -1766,12 +1766,12 @@ bool SrsSourceManager::has_source(SrsRequest *r)
     return true;
 }
 
-void SrsSourceManager::dispose()
+void SrsLiveSourceManager::dispose()
 {
     if (!lock)
         lock = srs_mutex_new();
     SrsLocker(lock);
-    std::map<std::string, SrsSource*>::iterator it;
+    std::map<std::string, SrsLiveSource*>::iterator it;
     for (it = pool.begin(); it != pool.end(); ++it) {
         SrsLiveSource* source = it->second;
         source->dispose();
@@ -1797,15 +1797,10 @@ srs_error_t SrsLiveSourceManager::setup_ticks()
 srs_error_t SrsLiveSourceManager::notify(int event, srs_utime_t interval, srs_utime_t tick)
 {
     srs_error_t err = srs_success;
-<<<<<<< HEAD
-
-    std::map<std::string, SrsLiveSource*>::iterator it;
-=======
     if (!lock)
         lock = srs_mutex_new();
     SrsLocker(lock);
-    std::map<std::string, SrsSource*>::iterator it;
->>>>>>> b3426fd0 (sigma merge 3.0release to 4.0release)
+    std::map<std::string, SrsLiveSource*>::iterator it;
     for (it = pool.begin(); it != pool.end();) {
         SrsLiveSource* source = it->second;
 
@@ -1845,14 +1840,10 @@ srs_error_t SrsLiveSourceManager::notify(int event, srs_utime_t interval, srs_ut
 
 void SrsLiveSourceManager::destroy()
 {
-<<<<<<< HEAD
-    std::map<std::string, SrsLiveSource*>::iterator it;
-=======
     if (!lock)
         lock = srs_mutex_new();
     SrsLocker(lock);
-    std::map<std::string, SrsSource*>::iterator it;
->>>>>>> b3426fd0 (sigma merge 3.0release to 4.0release)
+    std::map<std::string, SrsLiveSource*>::iterator it;
     for (it = pool.begin(); it != pool.end(); ++it) {
         SrsLiveSource* source = it->second;
         srs_freep(source);
